@@ -1,0 +1,1065 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Solar Watch Demo</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Readex+Pro:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<link href="https://cdn.jsdelivr.net/npm/cesium@1.114.0/Build/Cesium/Widgets/widgets.css" rel="stylesheet">
+<style>
+:root{--space:#04070D;--panel:rgba(9,16,30,.84);--rule:rgba(70,98,140,.5);--ink:#F3ECDD;--ink-2:#CBC3B3;--ink-3:#8F8B85;--sun:#F2B33D;--signal:#6CC3C0;--dust:#D08A42;--detect:#62AEEF;--alarm:#EC6A5E;--ok:#8FCB8C;
+  --f:'Readex Pro',system-ui,-apple-system,'Segoe UI',sans-serif;color-scheme:dark}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+html,body{margin:0;height:100%;background:var(--space);color:var(--ink);font-family:var(--f);overflow:hidden;font-variant-numeric:tabular-nums}
+button,select{font-family:inherit;font-size:13.5px;color:var(--ink)}
+:focus-visible{outline:2px solid var(--signal);outline-offset:2px}
+#main{position:absolute;inset:0}
+.cesium-viewer-bottom{left:auto!important;right:12px!important;bottom:4px!important;opacity:.7}
+.cesium-credit-textContainer *,.cesium-credit-expand-link{font-size:10.5px!important;color:#aaa!important}
+.glass{background:var(--panel);border:1px solid var(--rule);border-radius:14px;backdrop-filter:blur(10px)}
+
+/* brand + status */
+.brand{position:absolute;z-index:30;left:max(22px,env(safe-area-inset-left,0px));top:calc(20px + env(safe-area-inset-top,0px));display:flex;align-items:center;gap:12px}
+.brand b{font-size:18px;font-weight:600;letter-spacing:.01em}
+.brand span{font-size:12.5px;color:var(--ink-3)}
+.chips{position:absolute;z-index:30;right:max(22px,env(safe-area-inset-right,0px));top:calc(20px + env(safe-area-inset-top,0px));display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end;max-width:60vw}
+.chip{font-size:12px;padding:4px 10px;border-radius:999px;background:var(--panel);border:1px solid var(--rule);color:var(--ink-2);display:flex;gap:6px;align-items:center}
+.chip i{width:7px;height:7px;border-radius:50%;background:var(--ink-3)}
+.chip.live i{background:var(--signal)} .chip.warn i{background:var(--sun)}
+
+/* readout */
+.readout{position:absolute;z-index:25;left:max(22px,env(safe-area-inset-left,0px));top:calc(70px + env(safe-area-inset-top,0px));font-size:13px;color:var(--ink-2);line-height:1.6}
+.readout b{display:block;font-size:34px;font-weight:500;color:var(--ink);line-height:1.1}
+.readout small{color:var(--ink-3)}
+
+/* caption lower third */
+.caption{position:absolute;z-index:30;left:max(22px,env(safe-area-inset-left,0px));bottom:calc(84px + env(safe-area-inset-bottom,0px));max-width:min(640px,calc(100vw - 44px));transition:opacity .5s}
+.caption .n{font-size:13px;color:var(--sun);margin-bottom:6px}
+.caption h1{margin:0 0 6px;font-size:clamp(28px,3.6vw,46px);line-height:1.05;font-weight:600;letter-spacing:-.015em;text-shadow:0 2px 18px rgba(0,0,0,.6)}
+.caption p{margin:0;font-size:17px;color:var(--ink-2);line-height:1.5;text-shadow:0 1px 10px rgba(0,0,0,.8)}
+
+/* chapter bar */
+.bar{position:absolute;z-index:40;left:max(22px,env(safe-area-inset-left,0px));right:max(22px,env(safe-area-inset-right,0px));bottom:calc(18px + env(safe-area-inset-bottom,0px));display:flex;gap:10px;align-items:center;padding:8px 10px}
+.bar .ctl{display:flex;gap:6px}
+.btn{background:rgba(20,32,57,.95);border:1px solid var(--rule);border-radius:10px;padding:7px 12px;cursor:pointer;white-space:nowrap}
+.btn:hover{border-color:var(--ink-3)}
+.btn[aria-pressed="true"]{border-color:var(--sun);color:var(--sun)}
+.chapters{display:flex;gap:4px;flex:1;min-width:0;overflow-x:auto}
+.chapters button{flex:1;min-width:84px;background:none;border:0;padding:6px 4px 4px;cursor:pointer;color:var(--ink-3);font-size:12px;text-align:left;border-top:3px solid rgba(255,255,255,.12)}
+.chapters button.done{border-top-color:rgba(242,179,61,.5);color:var(--ink-2)}
+.chapters button.on{border-top-color:var(--sun);color:var(--ink)}
+body.filming .bar,body.filming .chips{display:none}
+
+/* camera stage */
+#camStage{position:absolute;z-index:20;right:max(22px,env(safe-area-inset-right,0px));top:calc(64px + env(safe-area-inset-top,0px));width:min(440px,40vw);aspect-ratio:4/3;border-radius:12px;overflow:hidden;border:1px solid var(--rule);background:#000;transition:all .9s cubic-bezier(.6,.05,.25,1)}
+body.camfull #camStage{right:0;top:0;width:100vw;height:100vh;aspect-ratio:auto;border-radius:0;border:0}
+#pip{position:absolute;inset:0}
+#pip .cesium-viewer-bottom{display:none}
+#overlay{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
+.reticle{position:absolute;inset:0;pointer-events:none;opacity:.55;background:
+ linear-gradient(var(--sun),var(--sun)) center/26px 1px no-repeat,linear-gradient(var(--sun),var(--sun)) center/1px 26px no-repeat}
+.frame{position:absolute;inset:14px;pointer-events:none;border:1px solid rgba(242,179,61,.35);border-radius:4px}
+.camTag{position:absolute;left:12px;top:10px;font-size:12px;color:var(--ink);background:rgba(4,7,13,.6);padding:3px 9px;border-radius:6px;z-index:2}
+body.camfull .camTag{left:max(22px,env(safe-area-inset-left,0px));top:calc(64px + env(safe-area-inset-top,0px));font-size:13px}
+.camOff{position:absolute;inset:0;display:grid;place-items:center;font-size:13px;color:var(--ink-3);background:rgba(4,7,13,.85);text-align:center;padding:20px}
+
+/* hud cards */
+.hud{position:absolute;z-index:31;right:max(22px,env(safe-area-inset-right,0px));top:calc(64px + env(safe-area-inset-top,0px));width:min(340px,calc(100vw - 44px));padding:16px 18px;display:flex;flex-direction:column;gap:12px}
+.hud h3{margin:0;font-size:14px;font-weight:600;color:var(--ink-2)}
+.kv{display:grid;grid-template-columns:1fr 1fr;gap:12px 14px}
+.kv div{display:flex;flex-direction:column}
+.kv b{font-size:24px;font-weight:500;line-height:1.1}
+.kv b small{font-size:13px;color:var(--ink-3);font-weight:400;margin-left:2px}
+.kv span{font-size:12px;color:var(--ink-3)}
+.kv .sun b{color:var(--sun)} .kv .det b{color:var(--detect)} .kv .dust b{color:var(--dust)} .kv .sig b{color:var(--signal)}
+.list{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px;font-size:13.5px}
+.list li{display:grid;grid-template-columns:8px 1fr auto;gap:10px;align-items:center}
+.list li i{width:8px;height:24px;border-radius:2px;background:var(--dust)}
+.list li span{color:var(--ink-3);font-size:12.5px}
+.bytes{display:flex;flex-direction:column;gap:8px;font-size:13px;color:var(--ink-2)}
+.bytes .row{display:grid;grid-template-columns:110px 1fr 70px;gap:10px;align-items:center}
+.bytes .track{height:10px;border-radius:5px;background:rgba(255,255,255,.08);overflow:hidden}
+.bytes .track i{display:block;height:100%;border-radius:5px}
+.drop{position:absolute;inset:0;z-index:60;display:grid;place-items:center;background:rgba(4,7,13,.8);font-size:20px;border:2px dashed var(--sun)}
+.toast{position:absolute;z-index:70;left:50%;top:calc(70px + env(safe-area-inset-top,0px));transform:translateX(-50%);padding:10px 16px;font-size:14px}
+.loading{position:absolute;inset:0;z-index:80;display:grid;place-items:center;background:var(--space);font-size:16px;color:var(--ink-2);transition:opacity .8s}
+.menu{position:absolute;z-index:45;right:max(22px,env(safe-area-inset-right,0px));bottom:calc(80px + env(safe-area-inset-bottom,0px));padding:14px;display:flex;flex-direction:column;gap:10px;width:300px;font-size:13px}
+.menu label{display:flex;flex-direction:column;gap:4px;color:var(--ink-3)}
+.menu select{width:100%}
+@media (max-width:760px){.chapters button{min-width:64px;font-size:11px}#camStage{width:calc(100vw - 44px);top:auto;bottom:calc(150px + env(safe-area-inset-bottom,0px))}.hud{display:none}.readout b{font-size:26px}}
+@media (prefers-reduced-motion:reduce){#camStage,.caption{transition:none}}
+</style>
+</head>
+<body>
+<div id="main"></div>
+<div class="loading" id="loading">Loading real imagery of the Earth</div>
+
+<div class="brand"><b>Solar Watch</b><span>Team WALL-E, SatForge UAE 2026</span></div>
+<div class="chips">
+  <span class="chip" id="chipAtt"><i></i>Attitude: built-in model</span>
+  <span class="chip" id="chipDet"><i></i>Detector: none loaded</span>
+</div>
+<div class="readout" id="readout"><b id="roBig">--</b><span id="roSmall"></span></div>
+
+<div id="camStage">
+  <div id="pip"></div><canvas id="overlay"></canvas><div class="frame"></div><div class="reticle"></div>
+  <span class="camTag" id="camTag">Onboard camera</span>
+  <div class="camOff" id="camOff">Camera on standby until a farm comes into view</div>
+</div>
+
+<section class="hud glass" id="hudCam" hidden aria-label="Camera readout">
+  <h3 id="hudCamTitle">Onboard camera</h3>
+  <div class="kv">
+    <div><b id="hGsd">--</b><span>per pixel</span></div>
+    <div><b id="hTilt">--</b><span>camera tilt</span></div>
+    <div><b id="hSwath">--</b><span>swath</span></div>
+    <div><b id="hHaze">--</b><span>haze and dust</span></div>
+  </div>
+</section>
+<section class="hud glass" id="hudDet" hidden aria-label="Detection results">
+  <h3 id="hudDetTitle">AI detection</h3>
+  <div class="kv">
+    <div class="det"><b id="dCount">--</b><span id="dCountL">panel areas found</span></div>
+    <div><b id="dMs">--</b><span id="dMsL">per frame</span></div>
+    <div class="det"><b id="dArea">--</b><span>panel area</span></div>
+    <div class="sun"><b id="dCap">--</b><span>estimated capacity</span></div>
+    <div class="sun"><b id="dToday">--</b><span>expected today</span></div>
+    <div><b id="dConf">--</b><span>mean confidence</span></div>
+  </div>
+</section>
+<section class="hud glass" id="hudDust" hidden aria-label="Dust alerts">
+  <h3>Sections flagged for cleaning</h3>
+  <div class="kv"><div class="dust"><b id="uN">--</b><span>sections over 3.5% loss</span></div><div class="dust"><b id="uLost">--</b><span>lost today</span></div></div>
+  <ul class="list" id="uList"></ul>
+</section>
+<section class="hud glass" id="hudLink" hidden aria-label="Downlink">
+  <h3 id="lTitle">Downlink over 433 MHz LoRa</h3>
+  <div class="kv"><div class="sig"><b id="lBytes">0<small>B</small></b><span>sent this pass</span></div><div><b id="lRssi">--</b><span>signal at the ground</span></div></div>
+  <div class="bytes">
+    <div class="row"><span>Results</span><div class="track"><i id="barRes" style="width:0;background:var(--signal)"></i></div><span id="tRes">0 B</span></div>
+    <div class="row"><span>Raw photo</span><div class="track"><i style="width:100%;background:rgba(242,179,61,.6)"></i></div><span>310 KB</span></div>
+  </div>
+  <ul class="list" id="lList"></ul>
+</section>
+<section class="hud glass" id="hudGround" hidden aria-label="Ground crews">
+  <h3>Cleaning crews</h3>
+  <div class="kv"><div class="dust"><b id="gLeft">--</b><span>sections left</span></div><div class="sun"><b id="gRec">--</b><span>recovered per day</span></div></div>
+  <p style="margin:0;font-size:13px;color:var(--ink-2)" id="gTxt"></p>
+</section>
+
+<div class="caption" id="caption"><div class="n" id="capN"></div><h1 id="capT">Solar Watch</h1><p id="capP"></p></div>
+
+<nav class="bar glass" aria-label="Demo chapters">
+  <div class="ctl"><button class="btn" id="playBtn" aria-pressed="true">Pause</button><button class="btn" id="restartBtn">Restart</button></div>
+  <div class="chapters" id="chapters"></div>
+  <div class="ctl"><button class="btn" id="exploreBtn" aria-pressed="false">Explore</button><button class="btn" id="setBtn" aria-expanded="false">Settings</button></div>
+</nav>
+<section class="menu glass" id="menu" hidden aria-label="Settings">
+  <label>Camera lens
+    <select id="lensSel" class="btn">
+      <option value="flight" selected>Flight design, 75 mm (about 9 m per pixel)</option>
+      <option value="1">What-if: larger telescope (1 m per pixel)</option>
+      <option value="0.3">What-if: aerial-equivalent (0.3 m per pixel)</option>
+    </select></label>
+  <label>Detector
+    <button class="btn" id="modelBtn">Load YOLO model (.onnx)</button>
+    <input type="file" id="modelFile" accept=".onnx" hidden></label>
+  <label>Detection confidence
+    <select id="confSel" class="btn"><option value="0.15">0.15</option><option value="0.25" selected>0.25</option><option value="0.4">0.40</option><option value="0.6">0.60</option></select></label>
+  <span style="color:var(--ink-3)">Keys: Space pause, ← → chapters, H hide controls for filming, C hide captions</span>
+</section>
+<div class="drop" id="drop" hidden>Drop your YOLO .onnx model to run it live on the camera</div>
+<div class="toast glass" id="toast" hidden></div>
+
+<script src="https://cdn.jsdelivr.net/npm/satellite.js@5.0.0/dist/satellite.min.js"></script>
+<script>window.CESIUM_BASE_URL='https://cdn.jsdelivr.net/npm/cesium@1.114.0/Build/Cesium/';</script>
+<script src="https://cdn.jsdelivr.net/npm/cesium@1.114.0/Build/Cesium/Cesium.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/onnxruntime-web@1.17.3/dist/ort.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/roslib@1.4.1/build/roslib.min.js"></script>
+<script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"}}</script>
+<script>
+'use strict';
+const SAT_ID=7;
+/* ---------------- sites and assumptions (shown in the UI) ---------------- */
+const FARM_POLYS = {"MBR1":{"name":"Phase 1","mw":"13 MW","pts":[[55.36819,24.76427],[55.37837,24.76426],[55.37838,24.76678],[55.37368,24.76678],[55.37348,24.76678],[55.37106,24.76678],[55.37016,24.76678],[55.36965,24.76678],[55.36867,24.76678],[55.36842,24.76678],[55.36819,24.76661],[55.36819,24.76613],[55.36819,24.76607],[55.36819,24.766],[55.36819,24.76488],[55.36819,24.76427]]},"MBR2":{"name":"Phase 2","mw":"200 MW","pts":[[55.36507,24.75299],[55.36814,24.75299],[55.37136,24.75298],[55.37263,24.75298],[55.37562,24.75298],[55.37924,24.75299],[55.38098,24.75298],[55.38653,24.75298],[55.38907,24.75298],[55.3917,24.75298],[55.39491,24.75298],[55.39689,24.75298],[55.3989,24.75298],[55.40124,24.75298],[55.40124,24.75443],[55.40124,24.75574],[55.40124,24.75691],[55.40125,24.75845],[55.40125,24.75983],[55.40124,24.76161],[55.40124,24.76275],[55.40124,24.76402],[55.39035,24.76401],[55.37768,24.76399],[55.36591,24.76401],[55.36575,24.76401],[55.36563,24.76401],[55.36511,24.76401],[55.36511,24.76174],[55.36507,24.75299]]},"MBR3A":{"name":"Phase 3 - Field A","mw":"200 MW","pts":[[55.40121,24.75253],[55.4012,24.7415],[55.36507,24.7415],[55.36507,24.75203],[55.36507,24.75253],[55.40121,24.75253]]},"NAD":{"name":"Noor Abu Dhabi","mw":"1177 MW","pts":[[55.47368,24.55545],[55.46239,24.55114],[55.46568,24.54344],[55.45686,24.53969],[55.43253,24.52933],[55.43225,24.52929],[55.41914,24.52929],[55.41548,24.53451],[55.42713,24.54043],[55.42716,24.54085],[55.42663,24.54101],[55.43918,24.54712],[55.4384,24.54862],[55.46523,24.55867],[55.4653,24.55842],[55.4711,24.5604],[55.47112,24.56036],[55.47114,24.5603],[55.47368,24.55545]]},"MBR3B":{"name":"Phase 3 - Field B","mw":"300 MW","pts":[[55.40322,24.76312],[55.4394,24.76312],[55.43939,24.74653],[55.40322,24.74655],[55.40322,24.75366],[55.40322,24.76312]]},"MBR3C":{"name":"Phase 3 - Field C","mw":"300 MW","pts":[[55.4032,24.74567],[55.43938,24.74563],[55.43936,24.72906],[55.41368,24.72908],[55.40319,24.72908],[55.4032,24.74469],[55.4032,24.74567]]},"MBR5A":{"name":"Phase 5 - Field A","mw":"300 MW","pts":[[55.41021,24.69182],[55.40117,24.69188],[55.4012,24.69728],[55.4012,24.71551],[55.40121,24.72518],[55.41026,24.72518],[55.41021,24.69182]]},"MBR5C":{"name":"Phase 5 - Field C","mw":"300 MW","pts":[[55.41938,24.72518],[55.42839,24.72516],[55.42839,24.69182],[55.41931,24.69181],[55.41938,24.72518]]},"MBR4PVa":{"name":"Phase 4 - photovoltaic","mw":"","pts":[[55.44353,24.76918],[55.48321,24.76917],[55.48321,24.77126],[55.47962,24.77126],[55.47962,24.77093],[55.45791,24.77093],[55.45791,24.7707],[55.45414,24.7707],[55.45414,24.77043],[55.45026,24.77043],[55.45026,24.77008],[55.44493,24.77008],[55.44493,24.76981],[55.44353,24.76981],[55.44353,24.76918]]},"AD":{"name":"Al-Dhafra Solar Power Plant","mw":"2 GW","pts":[[54.47727,24.16263],[54.48928,24.16285],[54.48987,24.16182],[54.4937,24.15521],[54.49408,24.15454],[54.4945,24.15378],[54.49517,24.1529],[54.49581,24.15206],[54.49986,24.14882],[54.50504,24.1468],[54.50998,24.14632],[54.54605,24.14949],[54.54821,24.14969],[54.54822,24.14543],[54.54825,24.14078],[54.55149,24.13255],[54.55203,24.13122],[54.55247,24.13009],[54.55333,24.12795],[54.55403,24.12612],[54.55432,24.12534],[54.55659,24.1189],[54.54926,24.11936],[54.54404,24.11968],[54.54021,24.11992],[54.52966,24.1206],[54.52652,24.12081],[54.52274,24.12105],[54.48964,24.12312],[54.48936,24.13781],[54.49109,24.1375],[54.49127,24.13837],[54.49002,24.13861],[54.47727,24.16263]]},"MBR5B":{"name":"Phase 5 - Field B","mw":"300 MW","pts":[[55.41931,24.69181],[55.41021,24.69182],[55.41026,24.72518],[55.41938,24.72518],[55.41931,24.69181]]},"MBR4PVb":{"name":"Phase 4 - photovoltaic","mw":"","pts":[[55.51586,24.76608],[55.5145,24.76523],[55.51446,24.7653],[55.51399,24.76606],[55.51326,24.76701],[55.51228,24.76805],[55.51141,24.76887],[55.5103,24.76973],[55.50938,24.77027],[55.50768,24.77117],[55.50669,24.7715],[55.50596,24.77163],[55.50506,24.77167],[55.50952,24.7717],[55.51091,24.77155],[55.51903,24.77164],[55.52283,24.76647],[55.5218,24.76598],[55.51586,24.76608]]},"MBR4PVc":{"name":"Phase 4 - photovoltaic","mw":"","pts":[[55.51459,24.7486],[55.51459,24.74733],[55.52464,24.74725],[55.52467,24.75479],[55.52467,24.75991],[55.5247,24.76443],[55.52341,24.76607],[55.52314,24.76608],[55.52283,24.76647],[55.5218,24.76598],[55.51586,24.76608],[55.5145,24.76523],[55.51454,24.76515],[55.51499,24.76436],[55.51537,24.76343],[55.51583,24.76209],[55.51608,24.76112],[55.51626,24.75908],[55.51627,24.75782],[55.51591,24.75555],[55.51564,24.75457],[55.5151,24.75309],[55.51494,24.75282],[55.51538,24.75264],[55.51479,24.75153],[55.51397,24.7502],[55.5134,24.7495],[55.51459,24.7486]]},"MBR4PVd":{"name":"Phase 4 - photovoltaic","mw":"","pts":[[55.48342,24.77158],[55.48425,24.77158],[55.48435,24.77162],[55.49176,24.77165],[55.49175,24.77053],[55.49216,24.77004],[55.49173,24.76964],[55.49085,24.76897],[55.49003,24.76824],[55.48955,24.76776],[55.48898,24.76712],[55.48806,24.76593],[55.48739,24.76478],[55.48686,24.76363],[55.48649,24.76268],[55.48626,24.76182],[55.48603,24.76078],[55.48603,24.75852],[55.48601,24.75551],[55.48587,24.7555],[55.4842,24.75549],[55.48421,24.75516],[55.48408,24.75517],[55.48408,24.75507],[55.48341,24.75508],[55.48338,24.7555],[55.48269,24.75551],[55.4827,24.76866],[55.48339,24.76868],[55.48342,24.77158]]},"MBR6":{"name":"Phase 6","mw":"1800 MW","pts":[[55.42888,24.6918],[55.4289,24.72425],[55.4289,24.7256],[55.45243,24.72558],[55.46112,24.72562],[55.46124,24.69187],[55.42888,24.6918]]}};   // © OpenStreetMap contributors, ODbL
+const ASSUME = {
+  panel_eff: 0.21, pr: 0.80, tilt_deg: 20, dust_threshold: 0.035,
+  soil_rate_day: 0.003, storm_p_day: 0.04, rain_p_day: 0.02, fixed_clean_days: 14, crew_cells_day: 30,
+};
+const SITES = [
+  {id:1, name:'Al Dhafra Solar PV', short:'Al Dhafra', lat:24.1456, lon:54.5139, cap_mw:2000, box:[6.0,5.0],
+   ref:'2 GWac. Outline © OpenStreetMap contributors'},
+  {id:2, name:'Noor Abu Dhabi', short:'Noor Abu Dhabi', lat:24.5425, lon:55.4439, cap_mw:1177, box:[4.5,4.0],
+   ref:'1,177 MW, Sweihan. Outline © OpenStreetMap contributors'},
+  {id:3, name:'MBR Solar Park, PV', short:'MBR Solar Park', lat:24.7547, lon:55.3650, cap_mw:3160, box:[8.0,6.0],
+   ref:'3,860 MW total incl. 700 MW CSP, June 2025 (Arabian Business). PV phase outlines © OpenStreetMap contributors, CSP fields excluded'},
+];
+const GS = [
+  {name:'Abu Dhabi GS', lat:24.45, lon:54.38},
+  {name:'Al Ain GS', lat:24.21, lon:55.74},
+];
+const CAM = {f_mm:75, pix_um:1.4, px:2592, max_offnadir:40}; // flight camera design
+// Rooftop survey runs on the ground platform (high-resolution aerial imagery), simulated here.
+// District centres are approximate.
+const DISTRICTS = [
+  {name:'Khalifa City', city:'Abu Dhabi', lat:24.420, lon:54.578, roofs:9400, start:0.018},
+  {name:'Mohammed Bin Zayed City', city:'Abu Dhabi', lat:24.345, lon:54.545, roofs:12600, start:0.012},
+  {name:'Al Shamkha', city:'Abu Dhabi', lat:24.375, lon:54.700, roofs:8100, start:0.009},
+  {name:'Arabian Ranches', city:'Dubai', lat:25.055, lon:55.268, roofs:4300, start:0.061},
+  {name:'Mirdif', city:'Dubai', lat:25.220, lon:55.420, roofs:7900, start:0.044},
+  {name:'Al Barsha', city:'Dubai', lat:25.105, lon:55.200, roofs:6200, start:0.037},
+];
+const ROOF_KW = 9;
+const WARM_DAYS = 60;   // simulated history before 'now'   // typical villa system size assumed for the rooftop survey
+const GRID = 12;
+
+/* ---------------- small helpers ---------------- */
+const $ = id => document.getElementById(id);
+const D2R = Math.PI/180, R2D = 180/Math.PI, RE = 6378.137;
+const clamp = (x,a,b)=>Math.max(a,Math.min(b,x));
+function rng(seed){return function(){seed|=0;seed=seed+0x6D2B79F5|0;let t=Math.imul(seed^seed>>>15,1|seed);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296;}}
+function gauss(r){let u=0,v=0;while(!u)u=r();while(!v)v=r();return Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*v);}
+const fmt = (x,d=0)=>x==null||!isFinite(x)?'--':x.toLocaleString('en-US',{maximumFractionDigits:d,minimumFractionDigits:d});
+function fmtEnergy(mwh){ if(mwh>=1e3) return fmt(mwh/1e3,1)+'<small>GWh</small>'; return fmt(mwh,0)+'<small>MWh</small>'; }
+const gst = d => d.toLocaleString('en-GB',{timeZone:'Asia/Dubai',hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false});
+const gstDate = d => d.toLocaleString('en-GB',{timeZone:'Asia/Dubai',weekday:'short',day:'numeric',month:'short'});
+const hm = d => d.toLocaleString('en-GB',{timeZone:'Asia/Dubai',hour:'2-digit',minute:'2-digit',hour12:false});
+function haversineKm(a,b,c,d){const p=D2R;const x=Math.sin((c-a)*p/2)**2+Math.cos(a*p)*Math.cos(c*p)*Math.sin((d-b)*p/2)**2;return 2*RE*Math.asin(Math.sqrt(x));}
+
+/* ---------------- sun ---------------- */
+function sunState(date){
+  const jd = date.getTime()/864e5 + 2440587.5, n = jd-2451545;
+  const L=(280.460+0.9856474*n)%360, g=(357.528+0.9856003*n)*D2R;
+  const lam=(L+1.915*Math.sin(g)+0.020*Math.sin(2*g))*D2R, eps=(23.439-0.0000004*n)*D2R;
+  const ra=Math.atan2(Math.cos(eps)*Math.sin(lam),Math.cos(lam)), dec=Math.asin(Math.sin(eps)*Math.sin(lam));
+  return {ra,dec,vec:[Math.cos(lam),Math.cos(eps)*Math.sin(lam),Math.sin(eps)*Math.sin(lam)]};
+}
+function sunElevDeg(date,lat,lon){
+  const s=sunState(date), H=satellite.gstime(date)+lon*D2R-s.ra;
+  return Math.asin(Math.sin(lat*D2R)*Math.sin(s.dec)+Math.cos(lat*D2R)*Math.cos(s.dec)*Math.cos(H))*R2D;
+}
+
+/* ---------------- orbit (SGP4 via satellite.js) ---------------- */
+function tleChecksum(l){let s=0;for(const ch of l){if(ch>='0'&&ch<='9')s+=+ch;else if(ch==='-')s+=1;}return s%10;}
+function makeTLE(epoch,inc,raan,n,ma){
+  const y=epoch.getUTCFullYear(), day=(epoch-Date.UTC(y,0,1))/864e5+1;
+  const l1='1 99999U 26001A   '+String(y%100).padStart(2,'0')+day.toFixed(8).padStart(12,'0')+'  .00000000  00000-0  00000-0 0  999';
+  const l2='2 99999 '+inc.toFixed(4).padStart(8)+' '+(((raan%360)+360)%360).toFixed(4).padStart(8)+' 0001000 '+'  0.0000'+' '+(((ma%360)+360)%360).toFixed(4).padStart(8)+' '+n.toFixed(8).padStart(11)+'    1';
+  return [l1+tleChecksum(l1), l2+tleChecksum(l2)];
+}
+const T0 = new Date();
+// Sun-synchronous, ~500 km, descending node 10:30 local time (ascending 22:30)
+const RAAN = sunState(T0).ra*R2D + 157.5;
+const TLE = makeTLE(T0, 97.40, RAAN, 15.2186, 140);
+const SATREC = satellite.twoline2satrec(TLE[0], TLE[1]);
+function satAt(date){
+  const pv=satellite.propagate(SATREC,date); if(!pv.position) return null;
+  const gmst=satellite.gstime(date), gd=satellite.eciToGeodetic(pv.position,gmst);
+  return {eci:pv.position, lat:satellite.degreesLat(gd.latitude), lon:satellite.degreesLong(gd.longitude), alt:gd.height, gmst};
+}
+function inEclipse(eci,date){
+  const s=sunState(date).vec, d=eci.x*s[0]+eci.y*s[1]+eci.z*s[2];
+  if(d>0) return false;
+  const px=eci.x-d*s[0], py=eci.y-d*s[1], pz=eci.z-d*s[2];
+  return Math.hypot(px,py,pz) < RE;
+}
+function lookFrom(gs,date,st){
+  const obs={longitude:gs.lon*D2R, latitude:gs.lat*D2R, height:0.02};
+  const ecf=satellite.eciToEcf(st.eci, st.gmst), la=satellite.ecfToLookAngles(obs, ecf);
+  return {el:la.elevation*R2D, range:la.rangeSat};
+}
+function gsd0_m(alt_km){ return alt_km*1e3*CAM.pix_um*1e-6/(CAM.f_mm*1e-3); }
+
+/* ---------------- packet encoder (mirrors satforge_packet.h) ---------------- */
+function hdr(dv,type,seq,t){dv.setUint8(0,(1<<4)|type);dv.setUint8(1,SAT_ID);dv.setUint16(2,seq,true);dv.setUint32(4,t,true);}
+function encHK(seq,t,h){const b=new Uint8Array(29),v=new DataView(b.buffer);hdr(v,1,seq,t);const o=8;
+  v.setUint8(o,h.mode);v.setUint16(o+1,h.bat_mv,true);v.setUint8(o+3,h.soc);v.setUint16(o+4,h.solar_mv,true);v.setUint16(o+6,h.solar_ma,true);
+  v.setInt16(o+8,h.temp_cc,true);v.setUint16(o+10,h.light,true);v.setInt16(o+12,h.roll,true);v.setInt16(o+14,h.pitch,true);v.setInt16(o+16,h.yaw,true);
+  v.setInt16(o+18,h.wheel,true);v.setUint8(o+20,h.flags);return b;}
+function encScene(seq,t,s){const b=new Uint8Array(8+41),v=new DataView(b.buffer);hdr(v,2,seq,t);const o=8;
+  v.setUint16(o,s.scene_id,true);v.setUint8(o+2,s.site_id);v.setInt32(o+3,Math.round(s.lat*1e6),true);v.setInt32(o+7,Math.round(s.lon*1e6),true);
+  v.setUint16(o+11,s.gsd_cm,true);v.setUint8(o+13,s.cloud);v.setUint8(o+14,s.conf);v.setUint32(o+15,s.area_m2,true);v.setUint16(o+19,s.raw_kb,true);
+  v.setUint8(o+21,GRID);v.setUint8(o+22,GRID);s.mask.forEach((m,c)=>{if(m)b[o+23+(c>>3)]|=1<<(c&7);});return b;}
+function encAlert(seq,t,a){const n=Math.min(60,a.items.length),b=new Uint8Array(8+4+4*n),v=new DataView(b.buffer);hdr(v,3,seq,t);const o=8;
+  v.setUint16(o,a.scene_id,true);v.setUint8(o+2,a.site_id);v.setUint8(o+3,n);
+  for(let i=0;i<n;i++){const e=a.items[i],p=o+4+4*i;v.setUint8(p,e.cell);v.setUint8(p+1,e.kind);v.setUint8(p+2,e.sev);v.setUint8(p+3,e.conf);}return b;}
+
+/* ---------------- packet decoder (same as decode.js) ---------------- */
+function decodePacket(bytes){
+  const v=new DataView(bytes.buffer,bytes.byteOffset,bytes.byteLength), vt=v.getUint8(0);
+  const hdr={ver:vt>>4,type:vt&0x0f,sat_id:v.getUint8(1),seq:v.getUint16(2,true),t_unix:v.getUint32(4,true),bytes:bytes.byteLength};
+  if(hdr.ver!==1) throw new Error('Unsupported packet version '+hdr.ver);
+  const o=8, MODES=['IDLE','IMAGING','INFERENCE','DOWNLINK','CHARGING','SAFE'];
+  if(hdr.type===1){const flags=v.getUint8(o+20),smv=v.getUint16(o+4,true),sma=v.getUint16(o+6,true);
+    return {...hdr,kind:'hk',mode:MODES[v.getUint8(o)]??'UNKNOWN',bat_v:v.getUint16(o+1,true)/1000,bat_soc:v.getUint8(o+3),
+      solar_v:smv/1000,solar_ma:sma,solar_mw:smv*sma/1000,temp_c:v.getInt16(o+8,true)/100,light_raw:v.getUint16(o+10,true),
+      roll:v.getInt16(o+12,true)/100,pitch:v.getInt16(o+14,true)/100,yaw:v.getInt16(o+16,true)/100,wheel_rpm:v.getInt16(o+18,true),
+      flags:{cam:!!(flags&1),sd:!!(flags&2),imu:!!(flags&4),temp:!!(flags&8),ina:!!(flags&16),eclipse:!!(flags&32),low_batt:!!(flags&64)}};}
+  if(hdr.type===2){const w=v.getUint8(o+21),h=v.getUint8(o+22),mask=[];
+    for(let c=0;c<w*h;c++) mask.push((bytes[o+23+(c>>3)]>>(c&7))&1);
+    return {...hdr,kind:'scene',scene_id:v.getUint16(o,true),site_id:v.getUint8(o+2),lat:v.getInt32(o+3,true)/1e6,lon:v.getInt32(o+7,true)/1e6,
+      gsd_m:v.getUint16(o+11,true)/100,cloud_pct:v.getUint8(o+13),conf_pct:v.getUint8(o+14),area_m2:v.getUint32(o+15,true),
+      raw_kb:v.getUint16(o+19,true),grid_w:w,grid_h:h,mask};}
+  if(hdr.type===3){const n=v.getUint8(o+3),K={1:'DUST',2:'MISSING',3:'NEW_INSTALL',4:'OBSTRUCTION'},alerts=[];
+    for(let i=0;i<n;i++){const b=o+4+4*i;alerts.push({cell:v.getUint8(b),kind:K[v.getUint8(b+1)]??'UNKNOWN',severity:v.getUint8(b+2),conf_pct:v.getUint8(b+3)});}
+    return {...hdr,kind:'alert',scene_id:v.getUint16(o,true),site_id:v.getUint8(o+2),alerts};}
+  throw new Error('Unknown packet type '+hdr.type);
+}
+
+/* ---------------- weather (Open-Meteo, falls back to a built-in model) ---------------- */
+const WX = {live:false, sites:{}};
+async function loadWeather(){
+  try{
+    await Promise.all(SITES.map(async s=>{
+      const f=await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${s.lat}&longitude=${s.lon}&hourly=shortwave_radiation,cloud_cover&forecast_days=4&timezone=UTC`,{signal:AbortSignal.timeout(6000)});
+      const a=await fetch(`https://air-quality-api.open-meteo.com/v1/air-quality?latitude=${s.lat}&longitude=${s.lon}&hourly=dust&forecast_days=4&timezone=UTC`,{signal:AbortSignal.timeout(6000)});
+      if(!f.ok) throw new Error('forecast '+f.status);
+      const fj=await f.json(), aj=a.ok?await a.json():null;
+      const t=fj.hourly.time.map(x=>Date.parse(x+':00Z'));
+      WX.sites[s.id]={t, ghi:fj.hourly.shortwave_radiation, cloud:fj.hourly.cloud_cover, dust:aj?aj.hourly.dust:null};
+    }));
+    WX.live=true;
+  }catch(e){ WX.live=false; WX.sites={}; }
+}
+function wxAt(site,date){
+  const w=WX.sites[site.id];
+  if(w){const i=Math.round((date.getTime()-w.t[0])/36e5); if(i>=0&&i<w.t.length) return {ghi:w.ghi[i]??0, cloud:w.cloud[i]??0, dust:w.dust?(w.dust[i]??0):null, live:true};}
+  // built-in model: clear-sky GHI from sun elevation, light seasonal haze, occasional cloud
+  const el=sunElevDeg(date,site.lat,site.lon), ghi=el>0?1040*Math.pow(Math.sin(el*D2R),1.15):0;
+  const day=Math.floor(date.getTime()/864e5), r=rng(day*31+site.id)(), cloud=r<0.12?Math.round(40+r*400)%90:Math.round(r*15);
+  return {ghi:ghi*(1-cloud/160), cloud, dust:null, live:false};
+}
+function dailyInsolation(site,dayStart){ let s=0; for(let h=0;h<24;h++) s+=wxAt(site,new Date(dayStart+h*36e5+18e5)).ghi; return s/1000; } // kWh/m2
+
+/* =====================================================================
+   SIMULATION: the "world" (farms, dust, weather) + the satellite onboard
+   ===================================================================== */
+const Sim = (()=>{
+  const R = rng(20261030);
+  // farm grids are laid over the real OpenStreetMap outlines, so detections line up with the real panels
+  const inPoly=(x,y,p)=>{ let ins=false; for(let i=0,j=p.length-1;i<p.length;j=i++){ const [xi,yi]=p[i],[xj,yj]=p[j]; if(((yi>y)!==(yj>y))&&(x<(xj-xi)*(y-yi)/(yj-yi)+xi)) ins=!ins; } return ins; };
+  SITES.forEach(s=>{
+    const keys = s.id===1?['AD']: s.id===2?['NAD']: Object.keys(FARM_POLYS).filter(k=>k.startsWith('MBR'));
+    s.polys = keys.map(k=>({key:k, pts:FARM_POLYS[k].pts}));
+    let x0=1e9,x1=-1e9,y0=1e9,y1=-1e9; s.polys.forEach(p=>p.pts.forEach(([x,y])=>{x0=Math.min(x0,x);x1=Math.max(x1,x);y0=Math.min(y0,y);y1=Math.max(y1,y);}));
+    const mx=(x1-x0)*0.03, my=(y1-y0)*0.03; x0-=mx; x1+=mx; y0-=my; y1+=my;
+    s.lat=(y0+y1)/2; s.lon=(x0+x1)/2; s.box=[(x1-x0)*111.32*Math.cos(s.lat*Math.PI/180),(y1-y0)*111.32];
+    s.cellInfo=[];
+    for(let r=0;r<GRID;r++) for(let c=0;c<GRID;c++){ const tally={}; let hits=0;
+      for(let a=0;a<4;a++) for(let b=0;b<4;b++){ const x=x0+(c+(b+.5)/4)*(x1-x0)/GRID, y=y1-(r+(a+.5)/4)*(y1-y0)/GRID;
+        for(const p of s.polys) if(inPoly(x,y,p.pts)){ tally[p.key]=(tally[p.key]||0)+1; hits++; break; } }
+      const phase=Object.entries(tally).sort((m,n)=>n[1]-m[1])[0]?.[0]||null; s.cellInfo.push({cov:hits/16, phase}); }
+  });
+  const farms = SITES.map(s=>{
+    const cellKm2 = (s.box[0]*s.box[1])/(GRID*GRID);
+    const cells = [];
+    for(let r=0;r<GRID;r++) for(let c=0;c<GRID;c++){
+      const k=r*GRID+c, info=s.cellInfo[k];
+      const onFarm = info.cov>=0.3;
+      let phaseDay = null;                                       // MBR phases that are built during the simulated history
+      if(onFarm && info.phase==='MBR6') phaseDay=25; else if(onFarm && info.phase && info.phase.startsWith('MBR4PV')) phaseDay=45;
+      const future = phaseDay!=null, built = onFarm && !future;
+      cells.push({k, built, future, phaseDay, soil: 0.01+R()*0.03, damaged:false, cleanAt:null, repairAt:null});
+    }
+    const nFinal = cells.filter(c=>c.built||c.future).length;
+    const panelKm2 = s.cap_mw/(ASSUME.panel_eff*1000);              // panel area implied by today's reference capacity
+    const gcr = panelKm2/(nFinal*cellKm2);                          // panel share of each built cell
+    return {site:s, cells, cellKm2, gcr, lastMask:null, prevDist:[1e9,1e9], lastCapture:0};
+  });
+  const sat = {soc:0.82, resBytes:0, temp:22, queue:[], seq:1, scene:1, hkEvery:60, lastHK:0, roll:0, wheel:900, mode:0, capUntil:0, infUntil:0,
+               lastTx:0, skipped:0, lastCaptureSite:null, stats:{sent:0,lost:0}};
+  const truth = {};
+  const BAT_WH = 1.2*3.7;     // 14500, 1200 mAh
+  const LOAD = [180,950,1300,700,180,120];    // mW per mode: idle, imaging, inference, downlink, charging, safe
+  let lastDay = null, simStartDay = Math.floor((T0.getTime()-WARM_DAYS*864e5)/864e5);
+
+  function socToMv(s){return Math.round(3300+900*Math.pow(clamp(s,0,1),0.85));}
+
+  function dailyWorld(dayIdx){
+    for(const f of farms){
+      const w = wxAt(f.site,new Date(dayIdx*864e5+12*36e5));
+      const dustBoost = w.dust!=null ? clamp(w.dust/120,0,3) : 0;
+      const storm = R()<ASSUME.storm_p_day, rain = R()<ASSUME.rain_p_day;
+      const band = Math.floor(R()*GRID);
+      for(const c of f.cells) if(c.future&&!c.built&&dayIdx-simStartDay>=c.phaseDay){c.built=true;c.soil=0.004;}
+      if(R()<0.01){ const c=f.cells[Math.floor(R()*f.cells.length)]; if(c.built&&!c.damaged){c.damaged=true;} }
+      for(const c of f.cells){ if(!c.built) continue;
+        c.soil += ASSUME.soil_rate_day*(1+dustBoost)*(0.7+0.6*R());
+        if(storm && Math.abs((c.k%GRID)-band)<5) c.soil += 0.03+0.05*R();
+        if(rain) c.soil *= 0.5;
+        if(c.cleanAt!=null && dayIdx>=c.cleanAt){c.soil=0.005;c.cleanAt=null;}
+        if(c.repairAt!=null && dayIdx>=c.repairAt){c.damaged=false;c.repairAt=null;}
+        c.soil = clamp(c.soil,0,0.35);
+      }
+    }
+  }
+
+  // ground operations react to alerts the ground station actually received
+  function opsOnAlert(siteId,items,dayIdx){
+    const f=farms.find(x=>x.site.id===siteId); let budget=ASSUME.crew_cells_day, day=dayIdx+1;
+    for(const it of items){ const c=f.cells[it.cell];
+      if(it.kind===1 && c.cleanAt==null){ c.cleanAt=day; if(--budget<=0){budget=ASSUME.crew_cells_day;day++;} }
+      if(it.kind===2 && c.repairAt==null){ c.repairAt=dayIdx+5; }
+    }
+  }
+
+  function capture(f,date,st,dist){
+    const t=Math.floor(date.getTime()/1000);
+    const off = Math.atan2(dist, st.alt)*R2D;
+    const gsd = gsd0_m(st.alt)/Math.pow(Math.cos(off*D2R),1.5);
+    const w = wxAt(f.site,date);
+    sat.roll = (off*(st.lon<f.site.lon?1:-1));
+    sat.capUntil = t+40; sat.infUntil = t+100;
+    if(w.cloud>60){ sat.skipped++; return; }                    // onboard filter: skip cloudy frame
+    const pDet = 0.998 - w.cloud/400;
+    const mask = f.cells.map(c => (c.built&&!c.damaged ? (R()<pDet?1:0) : (R()<0.003?1:0)));
+    let areaKm2=0, alerts=[];
+    mask.forEach((m,k)=>{ const c=f.cells[k];
+      if(m){ areaKm2 += f.cellKm2*f.gcr;
+        const obs = c.soil + gauss(R)*0.008 + w.cloud/2000;
+        if(obs>ASSUME.dust_threshold) alerts.push({cell:k,kind:1,sev:clamp(Math.round(obs/0.2*100),1,100),conf:clamp(Math.round(88-w.cloud/3+gauss(R)*4),40,99)});
+        if(f.lastMask && !f.lastMask[k] && c.built) alerts.push({cell:k,kind:3,sev:60,conf:clamp(Math.round(85+gauss(R)*4),40,99)});
+      } else if(f.lastMask && f.lastMask[k] && w.cloud<30){
+        alerts.push({cell:k,kind:2,sev:85,conf:clamp(Math.round(80+gauss(R)*5),40,99)});
+      }
+    });
+    areaKm2 *= 1+gauss(R)*0.025;
+    f.prevMask = f.lastMask; f.lastMask = mask;
+    const scene = {scene_id:sat.scene++, site_id:f.site.id, lat:f.site.lat, lon:f.site.lon, gsd_cm:Math.round(gsd*100),
+      cloud:Math.round(w.cloud), conf:clamp(Math.round(90-w.cloud/4-off/6+gauss(R)*2),40,99), area_m2:Math.round(areaKm2*1e6), raw_kb:Math.round(300+R()*40), mask};
+    alerts.sort((a,b)=>b.sev-a.sev);
+    // truth kept on the simulation side only, for the accuracy check
+    const built=f.cells.filter(c=>c.built&&!c.damaged);
+    truth[scene.scene_id]={area_m2: built.length*f.cellKm2*f.gcr*1e6, soil: built.reduce((a,c)=>a+c.soil,0)/Math.max(1,built.length), site:f.site.id};
+    // an alert packet is always sent, even with zero entries, so the ground knows which sections are now clear
+    sat.queue.push({pri:0, t, build:(seq)=>encAlert(seq,t,{scene_id:scene.scene_id,site_id:f.site.id,items:alerts.slice(0,60)}), items:alerts, site:f.site.id});
+    sat.queue.push({pri:1, t, build:(seq)=>encScene(seq,t,scene), raw:scene.raw_kb});
+    sat.lastCaptureSite=f.site.id;
+  }
+
+  function stepTo(date, dtS, onRx){
+    const st=satAt(date); if(!st) return null;
+    const t=Math.floor(date.getTime()/1000);
+    const day=Math.floor(date.getTime()/864e5);
+    if(lastDay===null) lastDay=day;
+    while(lastDay<day){ lastDay++; dailyWorld(lastDay); }
+
+    // imaging opportunities: closest approach within camera reach, farm in daylight
+    const reach = st.alt*Math.tan(CAM.max_offnadir*D2R);
+    for(const f of farms){
+      const d = haversineKm(st.lat,st.lon,f.site.lat,f.site.lon);
+      const [p1,p2]=f.prevDist;
+      if(p1<p2 && d>p1 && p1<reach && t-f.lastCapture>3000 && sunElevDeg(date,f.site.lat,f.site.lon)>15){ f.lastCapture=t; capture(f,date,st,p1); }
+      f.prevDist=[d,p1];
+    }
+
+    // power, thermal, attitude
+    const ecl=inEclipse(st.eci,date);
+    let view=null; for(const g of GS){const la=lookFrom(g,date,st); if(la.el>10 && (!view||la.el>view.el)) view={...la,gs:g};}
+    let mode = t<sat.capUntil?1 : t<sat.infUntil?2 : view&&sat.queue.length?3 : (!ecl&&sat.soc<0.97?4:0);
+    if(sat.soc<0.15 && mode!==3) mode=5;
+    sat.mode=mode;
+    const s=sunState(date).vec, rn=Math.hypot(st.eci.x,st.eci.y,st.eci.z);
+    const cz=(st.eci.x*s[0]+st.eci.y*s[1]+st.eci.z*s[2])/rn;           // sun angle on zenith-facing panels
+    const solar_mw = ecl?0: 2*1360*clamp(0.35+0.65*Math.max(0,cz),0,1)*0.85;   // 2 × 1 W panels, AM0 scaling
+    const net_mw = solar_mw*0.88 - LOAD[mode] - (Math.abs(sat.wheel)>0?40:0);
+    sat.soc = clamp(sat.soc + net_mw*dtS/3600/1000/BAT_WH, 0, 1);
+    const tTarget = ecl? -5 : 28 + (mode===2?6:0);
+    sat.temp += (tTarget-sat.temp)*(1-Math.exp(-dtS/900));
+    if(t>=sat.infUntil) sat.roll *= Math.exp(-dtS/60);
+    sat.wheel = Math.round(900 + sat.roll*40);
+
+    // onboard housekeeping sample
+    if(t-sat.lastHK>=sat.hkEvery){ sat.lastHK=t;
+      const light = ecl?40:Math.round(2600+1300*Math.max(0,cz));
+      const hk={mode, bat_mv:socToMv(sat.soc), soc:Math.round(sat.soc*100), solar_mv:solar_mw>0?5400+Math.round(R()*200):0,
+        solar_ma:solar_mw>0?Math.round(solar_mw/5.5):0, temp_cc:Math.round(sat.temp*100), light,
+        roll:Math.round((sat.roll+gauss(R)*0.3)*100), pitch:Math.round(gauss(R)*30), yaw:Math.round(gauss(R)*40), wheel:sat.wheel,
+        flags:1|2|4|8|16|(ecl?32:0)|(sat.soc<0.2?64:0)};
+      sat.queue.push({pri:2, t, build:(seq)=>encHK(seq,t,hk), hk:true});
+      // keep onboard HK buffer bounded (oldest dropped first)
+      const hks=sat.queue.filter(q=>q.hk); if(hks.length>240){ const drop=hks[0]; sat.queue.splice(sat.queue.indexOf(drop),1); }
+    }
+
+    // downlink: alerts first, then scenes, then housekeeping; one packet per 3 s
+    if(view && sat.queue.length){
+      sat.queue.sort((a,b)=>a.pri-b.pri || a.t-b.t);
+      let budget = Math.floor((t - sat.lastTx)/3);
+      while(budget-- > 0 && sat.queue.length){
+        const q=sat.queue.shift(); const bytes=q.build(sat.seq++); sat.lastTx=t;
+        const fspl = 20*Math.log10(view.range)+20*Math.log10(433)+32.44;
+        const rssi = 20 + 2 + 2 - 2 - fspl + gauss(R)*1.5;
+        const snr = rssi + 117 + gauss(R);
+        if(snr < -15){ sat.stats.lost++; continue; }
+        sat.stats.sent++;
+        if(q.items) opsOnAlert(q.site,q.items,day);
+        onRx({bytes, rssi:Math.round(rssi), snr:Math.round(snr*10)/10, gs:view.gs.name, rx_unix:t, source:'sim'});
+      }
+    } else { sat.lastTx = t; }
+    return {st, ecl, view, mode};
+  }
+
+  // one-year comparison of cleaning strategies, same weather and dust for both
+  function yearComparison(){
+    const out={fixed:{lossMWh:0,visits:0}, guided:{lossMWh:0,visits:0}};
+    for(const pol of ['fixed','guided']){
+      const r=rng(777);
+      for(const f of farms){
+        const soil=f.cells.map(c=>c.built||c.future?0.02:null), pending=f.cells.map(()=>null);
+        const H=6.0;                                   // kWh/m2/day, annual mean assumption for the UAE
+        for(let d=0; d<365; d++){
+          const storm=r()<ASSUME.storm_p_day, rain=r()<ASSUME.rain_p_day, band=Math.floor(r()*GRID), seen=r()<revisit;
+          let crew=ASSUME.crew_cells_day;
+          for(let k=0;k<soil.length;k++){ if(soil[k]==null) continue;
+            soil[k]+=ASSUME.soil_rate_day*(0.7+0.6*r()); if(storm&&Math.abs((k%GRID)-band)<5) soil[k]+=0.03+0.05*r(); if(rain) soil[k]*=0.5;
+            soil[k]=clamp(soil[k],0,0.35);
+            if(pol==='fixed' && d%ASSUME.fixed_clean_days===0){ soil[k]=0.005; out.fixed.visits++; }
+            if(pol==='guided'){
+              if(pending[k]!=null && d>=pending[k] && crew>0){ soil[k]=0.005; pending[k]=null; crew--; out.guided.visits++; }
+              else if(seen && pending[k]==null && soil[k]>ASSUME.dust_threshold) pending[k]=d+1;
+            }
+            out[pol].lossMWh += f.cellKm2*f.gcr*1e6*ASSUME.panel_eff*H*ASSUME.pr*soil[k]/1000;
+          }
+        }
+      }
+    }
+    out.revisit=revisit;
+    return out;
+  }
+
+  // share of days with a daylight imaging opportunity, measured from this orbit (15 days, 60 s steps)
+  let revisit = 0.3;
+  function measureRevisit(){
+    const days=new Set(); let n=0;
+    for(let s=0;s<15*86400;s+=60){ const d=new Date(T0.getTime()+s*1000), st=satAt(d); if(!st) continue;
+      const reach=st.alt*Math.tan(CAM.max_offnadir*D2R);
+      for(const f of farms){ if(haversineKm(st.lat,st.lon,f.site.lat,f.site.lon)<reach && sunElevDeg(d,f.site.lat,f.site.lon)>15) days.add(f.site.id+':'+Math.floor(s/86400)); } }
+    revisit = days.size/(15*farms.length);
+    return revisit;
+  }
+  // next time any farm is within camera reach in daylight
+  function nextImaging(from){
+    for(let s=60;s<20*86400;s+=30){ const d=new Date(from+s*1000), st=satAt(d); if(!st) continue;
+      const reach=st.alt*Math.tan(CAM.max_offnadir*D2R);
+      for(const f of farms) if(haversineKm(st.lat,st.lon,f.site.lat,f.site.lon)<reach && sunElevDeg(d,f.site.lat,f.site.lon)>15) return {t:d.getTime(), site:f.site};
+    }
+    return null;
+  }
+  return {stepTo, farms, sat, yearComparison, measureRevisit, nextImaging, truth, get revisit(){return revisit;}};
+})();
+
+
+/* 1U CubeSat model (CubeSat Design Specification envelope: 100 x 100 x 113.5 mm).
+   Units are millimetres. Z is the long axis; -Z faces nadir (camera side). */
+function CubeSatViewer(canvas, opts={}){
+  const T = THREE;
+  const renderer = new T.WebGLRenderer({canvas, antialias:true, alpha:true, preserveDrawingBuffer:true});
+  renderer.setPixelRatio(Math.min(2, window.devicePixelRatio||1));
+  renderer.outputColorSpace = T.SRGBColorSpace;
+  renderer.toneMapping = T.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.05;
+  const scene = new T.Scene();
+  const cam = new T.PerspectiveCamera(30, 1, 10, 3000);
+  cam.position.set(260, -300, 170); cam.up.set(0,0,1); cam.lookAt(0,0,0);
+
+  // light: hard sun from one side, cool earthshine from below, soft fill
+  const sun = new T.DirectionalLight(0xfff2dd, 3.2); sun.position.set(400, -150, 380); scene.add(sun);
+  const earth = new T.DirectionalLight(0x6fa8ff, 0.9); earth.position.set(-200, 150, -400); scene.add(earth);
+  scene.add(new T.HemisphereLight(0xbfd4ff, 0x1a2233, 0.55));
+
+  // reflection environment: black space above, bright sun, blue Earth below (metals need something to reflect)
+  {
+    const c=document.createElement('canvas'); c.width=512; c.height=256; const g=c.getContext('2d');
+    const grd=g.createLinearGradient(0,0,0,256);
+    grd.addColorStop(0,'#05070d'); grd.addColorStop(.45,'#0d1626'); grd.addColorStop(.52,'#7fb2ec'); grd.addColorStop(.62,'#2d6bb5'); grd.addColorStop(1,'#0c2a55');
+    g.fillStyle=grd; g.fillRect(0,0,512,256);
+    g.fillStyle='rgba(255,255,255,.9)'; g.beginPath(); g.arc(380,70,18,0,7); g.fill();
+    const tex=new T.CanvasTexture(c); tex.colorSpace=T.SRGBColorSpace;
+    const env=new T.Scene(); const sky=new T.Mesh(new T.SphereGeometry(500,48,24), new T.MeshBasicMaterial({map:tex, side:T.BackSide}));
+    sky.rotation.x=Math.PI/2; env.add(sky);
+    const panel=new T.Mesh(new T.PlaneGeometry(260,260), new T.MeshBasicMaterial({color:0xffffff})); panel.position.set(420,-160,380); panel.lookAt(0,0,0); env.add(panel);
+    const pm=new T.PMREMGenerator(renderer); scene.environment=pm.fromScene(env,0.03).texture; pm.dispose();
+  }
+
+  // ---------- textures drawn on canvas ----------
+  function cellTexture(){
+    const c=document.createElement('canvas'); c.width=512; c.height=360; const g=c.getContext('2d');
+    g.fillStyle='#0b1426'; g.fillRect(0,0,c.width,c.height);
+    const cols=6, rows=4, pad=10, cw=(c.width-pad*2)/cols, ch=(c.height-pad*2)/rows;
+    for(let r=0;r<rows;r++) for(let k=0;k<cols;k++){
+      const x=pad+k*cw+2, y=pad+r*ch+2, w=cw-4, h=ch-4;
+      const grd=g.createLinearGradient(x,y,x+w,y+h); grd.addColorStop(0,'#2c5cc4'); grd.addColorStop(.5,'#1f469c'); grd.addColorStop(1,'#3166cf');
+      g.fillStyle=grd; g.fillRect(x,y,w,h);
+      g.strokeStyle='rgba(205,215,230,.55)'; g.lineWidth=1.2;
+      for(let i=1;i<6;i++){ g.beginPath(); g.moveTo(x, y+h*i/6); g.lineTo(x+w, y+h*i/6); g.stroke(); }
+      g.lineWidth=2.4; g.strokeStyle='rgba(225,230,240,.8)';
+      for(const f of [0.33,0.66]){ g.beginPath(); g.moveTo(x+w*f,y); g.lineTo(x+w*f,y+h); g.stroke(); }
+    }
+    const t=new T.CanvasTexture(c); t.colorSpace=T.SRGBColorSpace; t.anisotropy=8; return t;
+  }
+  function pcbTexture(seed, base){
+    const c=document.createElement('canvas'); c.width=256; c.height=256; const g=c.getContext('2d');
+    g.fillStyle=base; g.fillRect(0,0,256,256);
+    let s=seed; const r=()=>((s=(s*9301+49297)%233280)/233280);
+    g.strokeStyle='rgba(210,180,90,.55)'; g.lineWidth=1.3;
+    for(let i=0;i<70;i++){ let x=r()*256,y=r()*256; g.beginPath(); g.moveTo(x,y); for(let j=0;j<3;j++){ if(r()<.5) x+=(r()-.5)*90; else y+=(r()-.5)*90; g.lineTo(x,y);} g.stroke(); }
+    g.fillStyle='rgba(225,200,120,.9)'; for(let i=0;i<90;i++){ g.beginPath(); g.arc(r()*256,r()*256,1.6,0,7); g.fill(); }
+    const t=new T.CanvasTexture(c); t.colorSpace=T.SRGBColorSpace; return t;
+  }
+
+  const M = {
+    rail:  new T.MeshStandardMaterial({color:0xd3d7dd, metalness:0.6, roughness:0.33}),
+    hard:  new T.MeshStandardMaterial({color:0x2a2d33, metalness:0.7, roughness:0.45}),
+    plate: new T.MeshStandardMaterial({color:0xa4abb5, metalness:0.75, roughness:0.42}),
+    solar: new T.MeshStandardMaterial({map:cellTexture(), metalness:0.15, roughness:0.3, emissive:0x0a1e4a, emissiveIntensity:0.35}),
+    glass: new T.MeshPhysicalMaterial({color:0x223344, metalness:0, roughness:0.05, transmission:0, clearcoat:1, clearcoatRoughness:0.05}),
+    black: new T.MeshStandardMaterial({color:0x111216, metalness:0.4, roughness:0.6}),
+    gold:  new T.MeshStandardMaterial({color:0xc99a3c, metalness:1, roughness:0.3}),
+    chip:  new T.MeshStandardMaterial({color:0x1b1c20, metalness:0.2, roughness:0.55}),
+    metalCan: new T.MeshStandardMaterial({color:0xcfd4da, metalness:1, roughness:0.25}),
+    battery: new T.MeshStandardMaterial({color:0x2f6fb5, metalness:0.2, roughness:0.4}),
+  };
+  const box=(w,h,d,m)=>new T.Mesh(new T.BoxGeometry(w,h,d),m);
+
+  const sat = new T.Group(); scene.add(sat);
+  const H=113.5, W=100, R=8.5;
+
+  // ---------- structure: four corner rails, end frames ----------
+  const frame = new T.Group(); sat.add(frame);
+  for(const sx of [-1,1]) for(const sy of [-1,1]){
+    const rail=box(R,R,H,M.rail); rail.position.set(sx*(W/2-R/2), sy*(W/2-R/2), 0); frame.add(rail);
+    for(const sz of [-1,1]){ const foot=box(R-1,R-1,4,M.hard); foot.position.set(sx*(W/2-R/2), sy*(W/2-R/2), sz*(H/2+2)); frame.add(foot); }
+  }
+  for(const sz of [-1,1]){
+    for(const [w,h,x,y] of [[W-2*R,6,0,W/2-3],[W-2*R,6,0,-W/2+3],[6,W-2*R,W/2-3,0],[6,W-2*R,-W/2+3,0]]){
+      const b=box(w,h,4,M.rail); b.position.set(x,y,sz*(H/2-2)); frame.add(b); }
+  }
+
+  // ---------- side faces: two body-mounted solar panels (+X, +Y), two plates with windows (-X, -Y) ----------
+  const faces = new T.Group(); sat.add(faces);
+  function solarFace(rotZ){
+    const g=new T.Group();
+    const sub=box(W-2*R+2, 1.6, H-14, new T.MeshStandardMaterial({color:0x1f3b2c, metalness:.2, roughness:.6})); g.add(sub);
+    const cell=new T.Mesh(new T.PlaneGeometry(W-2*R-4, H-20), M.solar); cell.position.y=-0.85; cell.rotation.x=Math.PI/2; g.add(cell);
+    g.position.set(0,-(W/2-0.8),0); const p=new T.Group(); p.add(g); p.rotation.z=rotZ; return p;
+  }
+  faces.add(solarFace(0));            // -Y in group space, rotated to face +X / +Y below
+  faces.children[0].rotation.z = Math.PI/2;   // +X
+  faces.add(solarFace(Math.PI));      // +Y
+  function windowPlate(rotZ){
+    const shape=new T.Shape(); const hw=(W-2*R)/2, hh=(H-14)/2;
+    shape.moveTo(-hw,-hh); shape.lineTo(hw,-hh); shape.lineTo(hw,hh); shape.lineTo(-hw,hh); shape.lineTo(-hw,-hh);
+    const hole=new T.Path(); const ww=hw*0.62, wh=hh*0.62; hole.moveTo(-ww,-wh); hole.lineTo(-ww,wh); hole.lineTo(ww,wh); hole.lineTo(ww,-wh); hole.lineTo(-ww,-wh); shape.holes.push(hole);
+    const geo=new T.ExtrudeGeometry(shape,{depth:1.4,bevelEnabled:false});
+    const m=new T.Mesh(geo,M.plate); m.rotation.x=Math.PI/2; m.position.y=-(W/2-0.2);
+    const p=new T.Group(); p.add(m); p.rotation.z=rotZ; return p;
+  }
+  faces.add(windowPlate(-Math.PI/2));   // -X
+  faces.add(windowPlate(0));            // -Y
+  faces.children[3].rotation.z = 0;
+
+  // ---------- nadir face (-Z): camera with lens barrel, LDR, tape antenna base ----------
+  const nadir=new T.Group(); sat.add(nadir);
+  const np=box(W-2*R, W-2*R, 1.6, M.plate); np.position.z=-H/2+0.8; nadir.add(np);
+  const barrel=new T.Mesh(new T.CylinderGeometry(15,17,22,48), M.black); barrel.rotation.x=Math.PI/2; barrel.position.set(10,-6,-H/2-10); nadir.add(barrel);
+  const ring=new T.Mesh(new T.TorusGeometry(15,1.2,12,48), M.metalCan); ring.position.set(10,-6,-H/2-21); nadir.add(ring);
+  const lens=new T.Mesh(new T.CircleGeometry(13.5,48), M.glass); lens.position.set(10,-6,-H/2-21.2); lens.rotation.x=Math.PI; nadir.add(lens);
+  const ldr=new T.Mesh(new T.CylinderGeometry(2.6,2.6,2,24), new T.MeshStandardMaterial({color:0xb8502a,roughness:.5})); ldr.rotation.x=Math.PI/2; ldr.position.set(-26,26,-H/2-1); nadir.add(ldr);
+
+  // ---------- zenith face (+Z): 433 MHz helical antenna ----------
+  const zen=new T.Group(); sat.add(zen);
+  const zp=box(W-2*R, W-2*R, 1.6, M.plate); zp.position.z=H/2-0.8; zen.add(zp);
+  const pts=[]; for(let i=0;i<=360;i++){ const a=i/360*Math.PI*2*14; pts.push(new T.Vector3(Math.cos(a)*3.2, Math.sin(a)*3.2, i/360*44)); }
+  const helix=new T.Mesh(new T.TubeGeometry(new T.CatmullRomCurve3(pts),720,0.55,6,false), M.gold); helix.position.set(-24,-24,H/2); zen.add(helix);
+  const sma=new T.Mesh(new T.CylinderGeometry(3.4,3.4,5,20), M.metalCan); sma.rotation.x=Math.PI/2; sma.position.set(-24,-24,H/2+2.5); zen.add(sma);
+
+  // ---------- internal stack: your actual parts ----------
+  const stack=new T.Group(); sat.add(stack);
+  const boards=[];
+  function board(z, base, seed, parts){
+    const g=new T.Group(); g.position.z=z;
+    const pcb=new T.Mesh(new T.BoxGeometry(W-2*R-4, W-2*R-4, 1.6), [M.hard,M.hard,M.hard,M.hard,new T.MeshStandardMaterial({map:pcbTexture(seed,base),roughness:.55}),M.hard]);
+    g.add(pcb); parts.forEach(p=>g.add(p));
+    for(const sx of [-1,1]) for(const sy of [-1,1]){ const so=new T.Mesh(new T.CylinderGeometry(1.6,1.6,22,10),M.metalCan); so.rotation.x=Math.PI/2; so.position.set(sx*36,sy*36,-11); g.add(so); }
+    stack.add(g); boards.push({g, z0:z}); return g;
+  }
+  const chip=(w,h,d,x,y,m=M.chip)=>{const c=box(w,h,d,m); c.position.set(x,y,0.8+d/2); return c;};
+  // EPS: TP4056 charger + boost, 14500 cell, INA219
+  const cell14500=new T.Mesh(new T.CylinderGeometry(7,7,50,32),M.battery); cell14500.rotation.z=Math.PI/2; cell14500.position.set(0,-14,8.6);
+  board(-36,'#1f5a3a',3,[cell14500, chip(17,26,2,24,20), chip(20,22,2,-22,22,new T.MeshStandardMaterial({color:0x1f4fa3,roughness:.5})) ]);
+  // OBC + camera: ESP32-S3 module with RF shield and camera module
+  board(-12,'#1b2f5e',7,[chip(18,25,3,-12,4,M.metalCan), chip(22,22,4,16,-8), chip(8,8,1.4,16,18), chip(12,6,1.6,-20,-24)]);
+  // COMMS: SX1278 Ra-02 + micro SD module
+  board(12,'#27313f',11,[chip(16,16,3,-10,10,M.metalCan), chip(20,16,2,16,-14,new T.MeshStandardMaterial({color:0x1f4fa3,roughness:.5})), chip(14,16,1.2,16,-14,M.metalCan)]);
+  // SENSORS + ADCS: MPU-6050, TMP102, reaction wheel
+  const wheel=new T.Mesh(new T.CylinderGeometry(15,15,7,48),M.metalCan); wheel.rotation.x=Math.PI/2; wheel.position.set(10,8,4.3);
+  const wheelHub=new T.Mesh(new T.CylinderGeometry(4,4,8.4,24),M.hard); wheelHub.rotation.x=Math.PI/2; wheelHub.position.copy(wheel.position);
+  board(34,'#5b2230',19,[chip(20,16,2,-20,-18,new T.MeshStandardMaterial({color:0x1f4fa3,roughness:.5})), chip(10,10,1.6,-22,18,new T.MeshStandardMaterial({color:0xc4372a,roughness:.5})), wheel, wheelHub]);
+
+  // ---------- interaction ----------
+  let exploded=0, target=0, yaw=0, dragging=false, lx=0, ly=0, tiltX=0.0, spin=true;
+  canvas.addEventListener('pointerdown',e=>{dragging=true;lx=e.clientX;ly=e.clientY;canvas.setPointerCapture(e.pointerId);spin=false;});
+  canvas.addEventListener('pointermove',e=>{if(!dragging)return; yaw+= (e.clientX-lx)*0.01; tiltX=Math.max(-0.8,Math.min(0.8,tiltX+(e.clientY-ly)*0.006)); lx=e.clientX; ly=e.clientY;});
+  canvas.addEventListener('pointerup',()=>{dragging=false;});
+  function resize(){ const w=canvas.clientWidth||300, h=canvas.clientHeight||300; renderer.setSize(w,h,false); cam.aspect=w/h; cam.updateProjectionMatrix(); }
+  new ResizeObserver(resize).observe(canvas); resize();
+  const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  let wheelRpm=900, last=performance.now();
+  function loop(t){
+    const dt=Math.min(.05,(t-last)/1000); last=t;
+    exploded += (target-exploded)*Math.min(1,dt*4);
+    boards.forEach((b,i)=>{ b.g.position.z = b.z0*(1+exploded*1.9); });
+    faces.children.forEach((f,i)=>{ const d=exploded*55; const dir=[[1,0],[0,1],[-1,0],[0,-1]][i]; f.position.set(dir[0]*d, dir[1]*d, 0); });
+    nadir.position.z=-exploded*70; zen.position.z=exploded*70;
+    if(spin && !reduce) yaw+=dt*0.25;
+    sat.rotation.set(tiltX,0,yaw);
+    wheel.rotation.y += dt*wheelRpm/60*Math.PI*2*0.05; wheelHub.rotation.y=wheel.rotation.y;
+    renderer.render(scene,cam); requestAnimationFrame(loop);
+  }
+  if(!opts.noLoop) requestAnimationFrame(loop);
+  return { group: sat, wheel, setExploded(v){target=v?1:0;}, setWheel(rpm){wheelRpm=rpm;} };
+}
+
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { GLTFExporter } from 'three/addons/exporters/GLTFExporter.js';
+window.THREE=THREE;
+const C=Cesium, P=new URLSearchParams(location.search);
+
+/* ======================= CubeSat model → glTF ======================= */
+async function cubesatGlbUrl(){
+  const cv=document.createElement('canvas'); cv.width=cv.height=64;
+  const v=CubeSatViewer(cv,{noLoop:true});
+  v.group.traverse(o=>{ if(!o.material) return; (Array.isArray(o.material)?o.material:[o.material]).forEach(m=>{ if('metalness' in m){ m.metalness=Math.min(m.metalness,.25); m.roughness=Math.max(m.roughness,.45); } }); });
+  const root=new THREE.Group(), g=v.group; g.rotation.x=-Math.PI/2; g.scale.setScalar(0.001); root.add(g); root.updateMatrixWorld(true);
+  const glb=await new GLTFExporter().parseAsync(root,{binary:true});
+  return URL.createObjectURL(new Blob([glb],{type:'model/gltf-binary'}));
+}
+
+/* ======================= viewers with real imagery ======================= */
+const esri=()=>new C.UrlTemplateImageryProvider({url:'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',maximumLevel:19,credit:new C.Credit('Imagery: Esri, Maxar, Earthstar Geographics. Farm outlines © OpenStreetMap contributors')});
+const lights=()=>new C.UrlTemplateImageryProvider({url:'https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/VIIRS_Black_Marble/default/2016-01-01/GoogleMapsCompatible_Level8/{z}/{y}/{x}.png',maximumLevel:8,credit:new C.Credit('Night lights: NASA Black Marble (GIBS)')});
+const base={baseLayer:false,animation:false,timeline:false,baseLayerPicker:false,geocoder:false,homeButton:false,sceneModePicker:false,navigationHelpButton:false,fullscreenButton:false,infoBox:false,selectionIndicator:false,shouldAnimate:false};
+const viewer=new C.Viewer('main',{...base,msaaSamples:4});
+const L1=viewer.imageryLayers.addImageryProvider(esri()); L1.dayAlpha=1; L1.nightAlpha=.05;
+const L2=viewer.imageryLayers.addImageryProvider(lights()); L2.dayAlpha=0; L2.nightAlpha=1; L2.brightness=1.6;
+const sc=viewer.scene; sc.globe.enableLighting=true; sc.globe.dynamicAtmosphereLighting=true; sc.globe.dynamicAtmosphereLightingFromSun=true; sc.highDynamicRange=true; sc.globe.maximumScreenSpaceError=1.5;
+const pipV=new C.Viewer('pip',{...base,msaaSamples:1,contextOptions:{webgl:{preserveDrawingBuffer:true}}});
+pipV.imageryLayers.addImageryProvider(esri());
+const ps=pipV.scene; ps.globe.enableLighting=true; ps.skyAtmosphere.show=false; ps.globe.showGroundAtmosphere=false; ps.fog.enabled=false; ps.screenSpaceCameraController.enableInputs=false; ps.globe.maximumScreenSpaceError=1.1;
+ps.camera.frustum.near=500; ps.camera.frustum.far=3e6;
+// sensor chain on the camera image: lens blur, rolling-shutter skew, haze, noise, vignette
+const fx={haze:.06,skew:0,blur:1};
+ps.postProcessStages.add(new C.PostProcessStage({fragmentShader:`
+uniform sampler2D colorTexture; uniform float u_t,u_haze,u_skew,u_blur; in vec2 v_textureCoordinates;
+void main(){ vec2 uv=v_textureCoordinates; uv.x+=(uv.y-.5)*u_skew; vec2 px=u_blur/czm_viewport.zw; vec3 c=vec3(0.); float w=0.;
+ for(int i=-1;i<=1;i++) for(int j=-1;j<=1;j++){ float k=(i==0&&j==0)?4.:((i==0||j==0)?2.:1.); c+=texture(colorTexture,uv+vec2(float(i),float(j))*px).rgb*k; w+=k; }
+ c/=w; c=mix(c,vec3(.80,.75,.66),u_haze); float n=fract(sin(dot(floor(uv*czm_viewport.zw)+u_t,vec2(12.9898,78.233)))*43758.5453)-.5; c+=n*.028;
+ float vg=1.-.36*pow(length(uv-.5)*1.35,2.); out_FragColor=vec4(c*vg,1.); }`,
+ uniforms:{u_t:()=>performance.now()%997,u_haze:()=>fx.haze,u_skew:()=>fx.skew,u_blur:()=>fx.blur}}));
+const SENSOR_W=CAM.px*CAM.pix_um*1e-6, SENSOR_H=1944*CAM.pix_um*1e-6;
+let lens='flight';
+function fovFor(altM){ if(lens==='flight') return 2*Math.atan((SENSOR_W/2)/(CAM.f_mm*1e-3)); const g=+lens; return 2*Math.atan((CAM.px*g/2)/altM); }
+
+/* ======================= orbit + attitude ======================= */
+const km=v=>new C.Cartesian3(v.x*1000,v.y*1000,v.z*1000);
+function ecfAt(d){ const st=satAt(d); if(!st) return null; return {st,p:km(satellite.eciToEcf(st.eci,st.gmst))}; }
+const V=()=>new C.Cartesian3();
+function frameAt(d){ const a=ecfAt(d), b=ecfAt(new Date(d.getTime()+1000)); if(!a||!b) return null;
+  const up=C.Cartesian3.normalize(a.p,V()), v=C.Cartesian3.subtract(b.p,a.p,V());
+  const fwd=C.Cartesian3.normalize(C.Cartesian3.subtract(v,C.Cartesian3.multiplyByScalar(up,C.Cartesian3.dot(v,up),V()),V()),V());
+  return {a,up,fwd,left:C.Cartesian3.cross(up,fwd,V())}; }
+function rolled(f,deg){ const r=deg*D2R,c=Math.cos(r),s=Math.sin(r);
+  const Y=C.Cartesian3.add(C.Cartesian3.multiplyByScalar(f.left,c,V()),C.Cartesian3.multiplyByScalar(f.up,s,V()),V());
+  const Z=C.Cartesian3.add(C.Cartesian3.multiplyByScalar(f.left,-s,V()),C.Cartesian3.multiplyByScalar(f.up,c,V()),V());
+  return {X:f.fwd,Y,Z,bore:C.Cartesian3.negate(Z,V())}; }
+const quatOf=ax=>C.Quaternion.fromRotationMatrix(new C.Matrix3(ax.X.x,ax.Y.x,ax.Z.x,ax.X.y,ax.Y.y,ax.Z.y,ax.X.z,ax.Y.z,ax.Z.z));
+function rollToward(f,site){ const T=C.Cartesian3.fromDegrees(site.lon,site.lat,0), d=C.Cartesian3.normalize(C.Cartesian3.subtract(T,f.a.p,V()),V());
+  return clamp(Math.atan2(C.Cartesian3.dot(d,f.left),-C.Cartesian3.dot(d,f.up))*R2D,-CAM.max_offnadir,CAM.max_offnadir); }
+
+/* ======================= Gazebo link (rosbridge) ======================= */
+let gz={connected:false,roll:null,wheel:null,t:0}, ros=null, rollPub=null;
+if(P.get('ros') && window.ROSLIB){
+  try{ ros=new ROSLIB.Ros({url:P.get('ros')});
+    ros.on('connection',()=>{ gz.connected=true; setChip('chipAtt','live','Attitude: Gazebo live');
+      new ROSLIB.Topic({ros,name:'/cubesat/telemetry',messageType:'std_msgs/String'}).subscribe(m=>{ try{ const j=JSON.parse(m.data); gz.roll=j.roll; gz.wheel=j.wheel_rpm; gz.t=performance.now(); }catch(e){} });
+      rollPub=new ROSLIB.Topic({ros,name:'/cubesat/roll_setpoint',messageType:'std_msgs/Float64'}); });
+    ros.on('error',()=>setChip('chipAtt','warn','Attitude: Gazebo unreachable, using built-in model'));
+    ros.on('close',()=>{ gz.connected=false; setChip('chipAtt','warn','Attitude: Gazebo disconnected, using built-in model'); });
+  }catch(e){ setChip('chipAtt','warn','Attitude: Gazebo link failed'); }
+}
+function setChip(id,cls,txt){ const el=$(id); el.className='chip '+(cls||''); el.innerHTML='<i></i>'+txt; }
+
+/* ======================= YOLO, live on the camera frames ======================= */
+const det={session:null,imgsz:+(P.get('imgsz')||640),names:(P.get('classes')||'solar_panel').split(','),busy:false,last:null,ms:null,conf:.25,iou:.45,seg:false};
+ort.env.wasm.wasmPaths='https://cdn.jsdelivr.net/npm/onnxruntime-web@1.17.3/dist/'; ort.env.wasm.numThreads=1;
+async function loadModel(src,label){
+  try{ setChip('chipDet','warn','Detector: loading '+label);
+    det.session=await ort.InferenceSession.create(src,{executionProviders:['wasm'],graphOptimizationLevel:'all'});
+    det.seg=det.session.outputNames.length>1;
+    setChip('chipDet','live',`Detector: ${label}, live${det.seg?' (segmentation)':''}`); toast(`Model loaded. ${det.seg?'Segmentation':'Detection'} runs on every camera frame.`);
+  }catch(e){ console.error(e); setChip('chipDet','warn','Detector: could not load model'); toast('Could not load the model. Export it with: yolo export model=best.pt format=onnx imgsz=640 opset=12'); } }
+if(P.get('model')) loadModel(P.get('model'),P.get('model').split('/').pop());
+const lb=document.createElement('canvas'); lb.width=lb.height=det.imgsz; const lbg=lb.getContext('2d',{willReadFrequently:true});
+async function runDetector(){
+  if(!det.session||det.busy) return; det.busy=true; const t0=performance.now();
+  try{
+    const src=ps.canvas, S=det.imgsz, r=Math.min(S/src.width,S/src.height), nw=Math.round(src.width*r), nh=Math.round(src.height*r), dx=(S-nw)/2, dy=(S-nh)/2;
+    lbg.fillStyle='rgb(114,114,114)'; lbg.fillRect(0,0,S,S); lbg.drawImage(src,dx,dy,nw,nh);
+    const px=lbg.getImageData(0,0,S,S).data, inp=new Float32Array(3*S*S);
+    for(let i=0;i<S*S;i++){ inp[i]=px[i*4]/255; inp[S*S+i]=px[i*4+1]/255; inp[2*S*S+i]=px[i*4+2]/255; }
+    const feeds={}; feeds[det.session.inputNames[0]]=new ort.Tensor('float32',inp,[1,3,S,S]);
+    const out=await det.session.run(feeds), o0=out[det.session.outputNames[0]], dims=o0.dims, data=o0.data;
+    const Cn=dims[1], N=dims[2], nm=det.seg?32:0, nc=Cn-4-nm; const boxes=[];
+    for(let i=0;i<N;i++){ let best=0,cls=0; for(let c=0;c<nc;c++){ const s=data[(4+c)*N+i]; if(s>best){best=s;cls=c;} }
+      if(best<det.conf) continue; const cx=data[i],cy=data[N+i],w=data[2*N+i],h=data[3*N+i];
+      const coef=nm?Array.from({length:nm},(_,k)=>data[(4+nc+k)*N+i]):null;
+      boxes.push({x1:(cx-w/2-dx)/r,y1:(cy-h/2-dy)/r,x2:(cx+w/2-dx)/r,y2:(cy+h/2-dy)/r,score:best,cls,coef}); }
+    boxes.sort((a,b)=>b.score-a.score); const keep=[];
+    const iou=(a,b)=>{ const ix=Math.max(0,Math.min(a.x2,b.x2)-Math.max(a.x1,b.x1)), iy=Math.max(0,Math.min(a.y2,b.y2)-Math.max(a.y1,b.y1)), I=ix*iy; return I/((a.x2-a.x1)*(a.y2-a.y1)+(b.x2-b.x1)*(b.y2-b.y1)-I); };
+    for(const b of boxes){ if(keep.length>=300) break; if(keep.every(k=>k.cls!==b.cls||iou(k,b)<det.iou)) keep.push(b); }
+    let maskInfo=null;
+    if(det.seg && keep.length){ const pr=out[det.session.outputNames[1]], [,K,mh,mw]=pr.dims, pd=pr.data;
+      const mask=new Uint8Array(mh*mw); // union of instance masks, in proto space (letterboxed)
+      for(const b of keep){ const bx1=Math.max(0,Math.floor((b.x1*r+dx)/S*mw)), by1=Math.max(0,Math.floor((b.y1*r+dy)/S*mh)), bx2=Math.min(mw,Math.ceil((b.x2*r+dx)/S*mw)), by2=Math.min(mh,Math.ceil((b.y2*r+dy)/S*mh));
+        let pixN=0; for(let y=by1;y<by2;y++) for(let x=bx1;x<bx2;x++){ let s=0; const o=y*mw+x; for(let k=0;k<K;k++) s+=b.coef[k]*pd[k*mh*mw+o]; if(s>0){ mask[o]=1; pixN++; } } b.maskPx=pixN; }
+      maskInfo={mask,mh,mw,dx,dy,r,S}; }
+    det.last={boxes:keep,mask:maskInfo,w:src.width,h:src.height}; det.ms=performance.now()-t0;
+  }catch(e){ console.error(e); } finally{ det.busy=false; }
+}
+
+/* ======================= entities ======================= */
+let satEnt=null; const posNow=new C.Cartesian3();
+const footH=new C.PolygonHierarchy([]), rays=[[],[],[],[]];
+viewer.entities.add({polygon:{hierarchy:new C.CallbackProperty(()=>footH,false),material:C.Color.fromCssColorString('#F2B33D').withAlpha(.18),height:200}});
+rays.forEach((_,i)=>viewer.entities.add({polyline:{positions:new C.CallbackProperty(()=>rays[i],false),width:1.2,material:C.Color.fromCssColorString('#FFE29A').withAlpha(.55),arcType:C.ArcType.NONE}}));
+const orbitPos=[], trackPos=[]; let linkPos=[];
+viewer.entities.add({polyline:{positions:new C.CallbackProperty(()=>orbitPos,false),width:1.6,material:new C.PolylineGlowMaterialProperty({glowPower:.15,color:C.Color.fromCssColorString('#F2B33D').withAlpha(.8)}),arcType:C.ArcType.NONE}});
+viewer.entities.add({polyline:{positions:new C.CallbackProperty(()=>trackPos,false),width:1.3,material:new C.PolylineDashMaterialProperty({color:C.Color.fromCssColorString('#F2B33D').withAlpha(.55),dashLength:14}),arcType:C.ArcType.NONE}});
+viewer.entities.add({polyline:{positions:new C.CallbackProperty(()=>linkPos,false),width:5,material:new C.PolylineGlowMaterialProperty({glowPower:.3,color:C.Color.fromCssColorString('#6CC3C0')}),arcType:C.ArcType.NONE}});
+SITES.forEach(s=>s.polys.forEach(p=>viewer.entities.add({polyline:{positions:C.Cartesian3.fromDegreesArray(p.pts.flat()),width:2,clampToGround:true,material:C.Color.fromCssColorString('#F2B33D').withAlpha(.8)}})));
+const lbl=(txt,col,size)=>({text:txt,font:`500 ${size}px Readex Pro, sans-serif`,fillColor:C.Color.fromCssColorString(col),outlineColor:C.Color.BLACK,outlineWidth:3,style:C.LabelStyle.FILL_AND_OUTLINE,horizontalOrigin:C.HorizontalOrigin.LEFT,pixelOffset:new C.Cartesian2(10,0),distanceDisplayCondition:new C.DistanceDisplayCondition(0,5e6)});
+SITES.forEach(s=>viewer.entities.add({position:C.Cartesian3.fromDegrees(s.lon,s.lat,60),point:{pixelSize:7,color:C.Color.fromCssColorString('#F2B33D'),outlineColor:C.Color.BLACK,outlineWidth:1.5},label:lbl(s.short,'#F3ECDD',14)}));
+GS.forEach(g=>viewer.entities.add({position:C.Cartesian3.fromDegrees(g.lon,g.lat,60),point:{pixelSize:7,color:C.Color.fromCssColorString('#6CC3C0'),outlineColor:C.Color.BLACK,outlineWidth:1.5},label:lbl(g.name,'#6CC3C0',13)}));
+// section highlights and crews for the ground scene
+const cellEnts=[], crewEnts=[];
+function crewIcon(){ const c=document.createElement('canvas'); c.width=c.height=48; const g=c.getContext('2d'); g.fillStyle='#F2B33D'; g.beginPath(); g.arc(24,24,15,0,7); g.fill(); g.lineWidth=4; g.strokeStyle='#04070D'; g.stroke();
+  g.fillStyle='#04070D'; g.fillRect(15,20,14,9); g.fillRect(29,23,5,6); g.beginPath(); g.arc(19,31,2.5,0,7); g.arc(30,31,2.5,0,7); g.fill(); return c.toDataURL(); }
+const CREW_IMG=crewIcon();
+
+/* ======================= simulation state ======================= */
+let simTime=T0.getTime(), rollDeg=0, target=null, centreKm=1e9, camOn=false, lastFrame=null;
+function stepSim(toMs){ let t=simTime; while(t<toMs){ const st=satAt(new Date(t)), far=st&&haversineKm(st.lat,st.lon,24.5,55)>3500, h=Math.min(far?120:5,(toMs-t)/1000); t+=h*1000; Sim.stepTo(new Date(t),h,()=>{}); } simTime=Math.max(simTime,toMs); }
+function farmOf(site){ return Sim.farms.find(f=>f.site.id===site.id); }
+function cellCorners(s,k){ const dLat=s.box[1]/111.32, dLon=s.box[0]/(111.32*Math.cos(s.lat*D2R)), lat0=s.lat+dLat/2, lon0=s.lon-dLon/2, r=Math.floor(k/GRID), c=k%GRID;
+  return [[lon0+c*dLon/GRID,lat0-r*dLat/GRID],[lon0+(c+1)*dLon/GRID,lat0-r*dLat/GRID],[lon0+(c+1)*dLon/GRID,lat0-(r+1)*dLat/GRID],[lon0+c*dLon/GRID,lat0-(r+1)*dLat/GRID]]; }
+function cellCentre(s,k){ const q=cellCorners(s,k); return [(q[0][0]+q[1][0])/2,(q[0][1]+q[2][1])/2]; }
+const flagged=f=>f.cells.filter(c=>c.built&&c.soil>ASSUME.dust_threshold);
+function energyToday(f,soilOverride){ const ds=Math.floor((simTime+4*36e5)/864e5)*864e5-4*36e5, H=dailyInsolation(f.site,ds); let e=0;
+  for(const c of f.cells) if(c.built) e+=f.cellKm2*f.gcr*1e6*ASSUME.panel_eff*H*ASSUME.pr*(1-(soilOverride?soilOverride(c):c.soil))/1000; return e; } // MWh
+
+/* ======================= camera overlay ======================= */
+const ov=$('overlay'), og=ov.getContext('2d');
+let overlayMode='none', reveal=1;
+function proj(lo,la){ return C.SceneTransforms.wgs84ToWindowCoordinates(ps,C.Cartesian3.fromDegrees(lo,la,0)); }
+function drawOverlay(){
+  const w=ov.clientWidth,h=ov.clientHeight,dpr=devicePixelRatio||1; if(ov.width!==Math.round(w*dpr)){ ov.width=Math.round(w*dpr); ov.height=Math.round(h*dpr); }
+  og.setTransform(dpr,0,0,dpr,0,0); og.clearRect(0,0,w,h); if(overlayMode==='none'||!target) return;
+  const f=farmOf(target);
+  if(overlayMode==='yolo' && det.last){ const L=det.last, sx=w/L.w, sy=h/L.h;
+    if(L.mask){ const {mask,mh,mw,dx,dy,r,S}=L.mask, img=og.createImageData(mw,mh); for(let i=0;i<mask.length;i++) if(mask[i]){ img.data[i*4]=98; img.data[i*4+1]=174; img.data[i*4+2]=239; img.data[i*4+3]=110; }
+      const tmp=document.createElement('canvas'); tmp.width=mw; tmp.height=mh; tmp.getContext('2d').putImageData(img,0,0);
+      // proto space → letterbox → frame
+      og.save(); og.imageSmoothingEnabled=true; const k=S/mw/r; og.drawImage(tmp,(-dx/r)*sx,(-dy/r)*sy,mw*k*sx,mh*k*sy); og.restore(); }
+    og.lineWidth=1.5; og.font='500 11px Readex Pro, sans-serif';
+    L.boxes.forEach((b,i)=>{ if(i/L.boxes.length>reveal) return; const x=b.x1*sx,y=b.y1*sy,bw=(b.x2-b.x1)*sx,bh=(b.y2-b.y1)*sy; og.strokeStyle='#9FD0FF'; og.strokeRect(x,y,bw,bh);
+      const t=`${det.names[b.cls]||'class '+b.cls} ${(b.score*100).toFixed(0)}%`; og.fillStyle='rgba(4,7,13,.75)'; og.fillRect(x,y-15,og.measureText(t).width+8,15); og.fillStyle='#9FD0FF'; og.fillText(t,x+4,y-4); });
+    return; }
+  // simulated detection or dust view on the farm grid
+  const cells=f.cells.map((c,k)=>({c,k})).filter(o=>o.c.built);
+  cells.forEach((o,i)=>{ if(i/cells.length>reveal) return; const pts=cellCorners(f.site,o.k).map(([a,b])=>proj(a,b)); if(pts.some(p=>!p)) return;
+    const dusty=overlayMode==='dust'&&o.c.soil>ASSUME.dust_threshold, sev=clamp(o.c.soil/0.2,0,1);
+    og.beginPath(); pts.forEach((p,j)=>j?og.lineTo(p.x,p.y):og.moveTo(p.x,p.y)); og.closePath();
+    og.fillStyle=dusty?`rgba(208,138,66,${.25+.45*sev})`:'rgba(98,174,239,.26)'; og.fill(); og.strokeStyle=dusty?'#E7A562':'#9FD0FF'; og.lineWidth=1; og.stroke(); });
+}
+
+/* ======================= director: the scripted demo ======================= */
+const S={i:0,t:0,playing:true,explore:false,warp:20,frozen:false,data:{}};
+const scenes=[
+ {key:'space',label:'From space',n:'1',title:'500 km above the Earth',text:'Solar Watch is a 1U CubeSat built by Team WALL-E. It circles the planet every 94 minutes, and this is its real orbit.',dur:11,
+  enter(){ cinema(); S.warp=18; viewer.trackedEntity=undefined; viewer.camera.setView({destination:C.Cartesian3.fromDegrees(57,16,2.1e7)}); },
+  update(t){ if(t>5.2&&!S.data.flying){ S.data.flying=true; S.frozen=true; flyToSat(5,()=>{ S.frozen=false; follow(); }); } }},
+ {key:'approach',label:'Approach',n:'2',title:'Heading for the UAE',text:'',max:40,
+  enter(){ S.warp=22; follow(); },
+  update(t){ const d=target?haversineKm(lastFrame.a.st.lat,lastFrame.a.st.lon,target.lat,target.lon):null;
+    capText(target?`Target: ${target.name}, ${fmt(d,0)} km away. The reaction wheel rolls the satellite so the camera points at it.`:'Waiting for a farm to come into reach.');
+    if(camOn && t>3) return 'next'; }},
+ {key:'camera',label:'Camera view',n:'3',title:'Through the onboard camera',text:'An OV5640 sensor behind a 75 mm lens, about 9 metres per pixel, with the blur, haze and noise of a small satellite camera. This is real imagery of the ground below.',max:30,
+  enter(){ S.warp=.8; document.body.classList.add('camfull'); show('hudCam'); overlayMode='none'; },
+  update(t){ S.warp=centreKm>120?16:centreKm>40?6:centreKm>12?2:.8;   // fast while far, real motion near the target
+    if(centreKm<1.2 && t>2.5){ S.frozen=true; toast('Frame captured'); return 'next'; } if(t>28){ S.frozen=true; return 'next'; } }},
+ {key:'detect',label:'AI detection',n:'4',title:'AI detection, running live',text:'',dur:15,
+  enter(){ S.frozen=true; document.body.classList.add('camfull'); show('hudDet'); overlayMode=det.session?'yolo':'sim'; reveal=0;
+    capText(det.session?'Our YOLO model is running on this exact frame in the browser, the same way it runs onboard.':'Simulated detection on the farm grid. Load the team\'s YOLO model in Settings to run it live on this frame.'); },
+  update(t){ reveal=clamp(t/4,0,1); }},
+ {key:'dust',label:'Dust storm',n:'5',title:'A dust storm rolls in',text:'Haze cuts the sunlight and dust settles on the panels. Every section losing more than 3.5% of its output is flagged.',dur:14,
+  enter(){ S.frozen=true; document.body.classList.add('camfull'); show('hudDust'); overlayMode='dust'; reveal=1; const f=farmOf(target); S.data.storm={f, base:f.cells.map(c=>c.soil), band:Math.floor(GRID*.25), applied:false}; },
+  update(t){ const st=S.data.storm, f=st.f; fx.haze=t<5?.06+.32*(t/5):Math.max(.12,.38-.26*((t-5)/4));
+    const k=clamp(t/6,0,1); f.cells.forEach((c,i)=>{ const col=i%GRID; const hit=Math.abs(col-(GRID/2))<GRID*.42; c.soil=st.base[i]+(hit?k*(0.03+0.05*((i*7919)%13)/13):0); });
+    renderDustHud(f); },
+  exit(){ fx.haze=.08; }},
+ {key:'downlink',label:'Downlink',n:'6',title:'Answers, not images',text:'The results go down over a 433 MHz LoRa link to a ground station in Abu Dhabi. A whole image becomes a few dozen bytes.',dur:15,
+  enter(){ document.body.classList.remove('camfull'); show('hudLink'); S.frozen=false; S.warp=6; overlayMode='dust'; S.data.link={sent:0,res:0,list:[]}; viewGsAndSat(); },
+  update(t){ const L=S.data.link, plan=[['Alert packet',4+4*Math.min(60,flagged(farmOf(target)).length)+8],['Image result',49],['Housekeeping',29],['Housekeeping',29],['Housekeeping',29]];
+    const due=Math.min(plan.length,Math.floor(t/1.6)); while(L.list.length<due){ const [n,b]=plan[L.list.length]; L.list.push([n,b]); L.sent+=b; if(n!=='Housekeeping') L.res+=b; }
+    $('lBytes').innerHTML=fmt(L.sent)+'<small>B</small>'; $('tRes').textContent=fmt(L.res)+' B'; $('barRes').style.width=Math.max(.6,L.res/(310*1024)*100*40)+'%';
+    $('lList').innerHTML=L.list.map(([n,b])=>`<li><i style="background:var(--signal)"></i>${n}<span>${b} B</span></li>`).join('');
+    $('lTitle').textContent=linkPos.length?`Downlink to ${S.data.gsName||'Abu Dhabi GS'}`:'Waiting for the ground station'; }},
+ {key:'ground',label:'Ground crews',n:'7',title:'Crews go only where they are needed',text:'',dur:16,
+  enter(){ S.frozen=true; show('hudGround'); overlayMode='none'; const f=farmOf(target); setupGround(f); },
+  update(t){ updateGround(t); }, exit(){ clearGround(); }},
+ {key:'outro',label:'Summary',n:'8',title:'Solar Watch',text:'',dur:12,
+  enter(){ show(null); S.frozen=false; S.warp=30; viewer.trackedEntity=undefined; viewer.camera.flyTo({destination:C.Cartesian3.fromDegrees(56,19,1.6e7),duration:5});
+    const tot=Sim.farms.reduce((a,f)=>{ const n=f.cells.filter(c=>c.built).length; return {a:a.a+n*f.cellKm2*f.gcr,c:a.c+n*f.cellKm2*f.gcr*1e6*ASSUME.panel_eff/1000};},{a:0,c:0});
+    capText(`Three farms, ${fmt(tot.a,1)} km² of panels and about ${fmt(tot.c/1000,1)} GW of capacity, watched from a satellite the size of a coffee mug box. Team WALL-E, SatForge UAE 2026.`); }},
+];
+function capText(p){ $('capP').textContent=p; }
+function show(id){ ['hudCam','hudDet','hudDust','hudLink','hudGround'].forEach(h=>$(h).hidden=h!==id); }
+function cinema(){ document.body.classList.remove('camfull'); show(null); overlayMode='none'; }
+function enterScene(i){ const prev=scenes[S.i]; if(prev&&prev.exit) try{prev.exit();}catch(e){}
+  S.i=i; S.t=0; S.data={}; const s=scenes[i]; $('capN').textContent=`${s.n} of ${scenes.length}`; $('capT').textContent=s.title; capText(s.text); s.enter&&s.enter(); renderChapters(); }
+function nextScene(){ if(S.i<scenes.length-1) enterScene(S.i+1); else S.playing=false, $('playBtn').textContent='Play', $('playBtn').setAttribute('aria-pressed','false'); }
+function renderChapters(){ $('chapters').innerHTML=scenes.map((s,i)=>`<button class="${i<S.i?'done':''} ${i===S.i?'on':''}" data-i="${i}" aria-current="${i===S.i}">${s.n} ${s.label}</button>`).join('');
+  $('chapters').querySelectorAll('button').forEach(b=>b.onclick=()=>jumpScene(+b.dataset.i)); }
+function jumpScene(i){ if(i<=2){ prepPass(); } else if(i>=3 && S.i<3){ prepPass(); fastForwardToCentre(); } enterScene(i); }
+function follow(){ if(!satEnt) return; satEnt.viewFrom=new C.Cartesian3(-650,-950,420); viewer.trackedEntity=satEnt; }
+function flyToSat(dur,done){ const f=lastFrame; if(!f){ done&&done(); return; }
+  const dest=C.Cartesian3.add(f.a.p,C.Cartesian3.add(C.Cartesian3.multiplyByScalar(f.fwd,-1100,V()),C.Cartesian3.add(C.Cartesian3.multiplyByScalar(f.up,420,V()),C.Cartesian3.multiplyByScalar(f.left,-600,V()),V()),V()),V());
+  const dir=C.Cartesian3.normalize(C.Cartesian3.subtract(f.a.p,dest,V()),V());
+  viewer.camera.flyTo({destination:dest,orientation:{direction:dir,up:f.up},duration:dur,easingFunction:C.EasingFunction.QUADRATIC_IN_OUT,complete:done}); }
+function viewGsAndSat(){ const g=GS[0]; S.data.gsName=g.name; viewer.trackedEntity=undefined;
+  viewer.camera.flyTo({destination:C.Cartesian3.fromDegrees(g.lon-1.6,g.lat-4.6,780000),orientation:{heading:C.Math.toRadians(15),pitch:C.Math.toRadians(-28),roll:0},duration:3}); }
+function setupGround(f){ const s=f.site, fl=flagged(f).slice(0,10); S.data.g={f,jobs:fl.map((c,j)=>({c,k:c.k,start:1.2+j*.9})),soil0:f.cells.map(c=>c.soil)};
+  fl.forEach(c=>{ const q=cellCorners(s,c.k); cellEnts.push(viewer.entities.add({rectangle:{coordinates:C.Rectangle.fromDegrees(q[0][0],q[2][1],q[1][0],q[0][1]),material:C.Color.fromCssColorString('#D08A42').withAlpha(.55),outline:false}})); });
+  const gate=[s.lon,s.lat-s.box[1]/111.32/2-0.01];
+  S.data.g.jobs.forEach((j,n)=>{ const tgt=cellCentre(s,j.k); j.from=gate; j.to=tgt; j.ent=viewer.entities.add({position:new C.CallbackProperty(()=>{ const u=clamp((S.t-j.start)/3,0,1); return C.Cartesian3.fromDegrees(j.from[0]+(j.to[0]-j.from[0])*u, j.from[1]+(j.to[1]-j.from[1])*u, 30); },false),billboard:{image:CREW_IMG,width:30,height:30,verticalOrigin:C.VerticalOrigin.CENTER,disableDepthTestDistance:Number.POSITIVE_INFINITY}}); crewEnts.push(j.ent); });
+  viewer.trackedEntity=undefined; viewer.camera.flyTo({destination:C.Cartesian3.fromDegrees(s.lon,s.lat-s.box[1]/111.32*1.25,6500+s.box[0]*500),orientation:{heading:0,pitch:C.Math.toRadians(-42),roll:0},duration:3.5});
+  S.data.g.lossBefore=energyToday(f,c=>Math.max(0,S.data.g.soil0[c.k]))-energyToday(f); }
+function updateGround(t){ const g=S.data.g; if(!g) return; let left=0;
+  g.jobs.forEach((j,n)=>{ const done=t>j.start+3.4; if(done&&!j.cleaned){ j.cleaned=true; j.c.soil=.004; const e=cellEnts[n]; if(e) e.rectangle.material=C.Color.fromCssColorString('#62AEEF').withAlpha(.45); } if(!j.cleaned) left++; });
+  const before=energyToday(g.f,c=>g.soil0[c.k]), now=energyToday(g.f);
+  $('gLeft').textContent=left; $('gRec').innerHTML=fmt(Math.max(0,now-before),0)+'<small>MWh</small>';
+  $('gTxt').textContent=`${g.jobs.length} crews sent to ${g.jobs.length} flagged sections at ${g.f.site.short}. A fixed schedule would clean all ${g.f.cells.filter(c=>c.built).length}.`;
+  capText(`Each crew drives straight to a flagged section. ${left?left+' still to go.':'All flagged sections are clean, and the farm is back to full output.'}`); }
+function clearGround(){ cellEnts.splice(0).forEach(e=>viewer.entities.remove(e)); crewEnts.splice(0).forEach(e=>viewer.entities.remove(e)); }
+function renderDustHud(f){ const fl=flagged(f).sort((a,b)=>b.soil-a.soil); $('uN').textContent=fl.length;
+  $('uLost').innerHTML=fmt(energyToday(f,c=>0)-energyToday(f),0)+'<small>MWh</small>';
+  $('uList').innerHTML=fl.slice(0,6).map(c=>`<li><i style="background:${c.soil>.12?'#B9502C':'#D08A42'}"></i>Row ${Math.floor(c.k/GRID)+1}, column ${c.k%GRID+1}<span>${fmt(c.soil*100,1)}% loss</span></li>`).join(''); }
+// pass preparation: put the clock a few minutes before the next daylight imaging pass
+let passSite=null;
+function prepPass(){ const n=Sim.nextImaging(Math.max(simTime,T0.getTime())); if(!n) return; passSite=n.site; stepSim(n.t-7.5*60*1000); rollDeg=0; S.frozen=false; }
+function fastForwardToCentre(){ const site=passSite; if(!site) return; for(let k=0;k<2400;k++){ const f=frameAt(new Date(simTime)); if(!f) break; rollDeg=rollToward(f,site);
+    const ax=rolled(f,rollDeg), hit=C.IntersectionTests.rayEllipsoid(new C.Ray(f.a.p,ax.bore),C.Ellipsoid.WGS84);
+    if(hit){ const gp=C.Cartographic.fromCartesian(C.Ray.getPoint(new C.Ray(f.a.p,ax.bore),hit.start)); if(haversineKm(gp.latitude*R2D,gp.longitude*R2D,site.lat,site.lon)<1.2) break; }
+    stepSim(simTime+1000); } target=site; }
+
+/* ======================= main loop ======================= */
+let lastT=performance.now(), lastOrbitMin=-1, tick=0, lastDetRun=0;
+function orbitLines(now){ const m=Math.floor(now.getTime()/60000); if(m===lastOrbitMin) return; lastOrbitMin=m; orbitPos.length=0; trackPos.length=0; const g0=satellite.gstime(now);
+  for(let s=0;s<=96*60;s+=40){ const d=new Date(now.getTime()+s*1000), st=satAt(d); if(!st) continue; orbitPos.push(km(satellite.eciToEcf(st.eci,g0))); if(s<=55*60) trackPos.push(C.Cartesian3.fromDegrees(st.lon,st.lat,3000)); } }
+function loop(nowPerf){
+  requestAnimationFrame(loop);
+  const dt=Math.min(.1,(nowPerf-lastT)/1000); lastT=nowPerf;
+  if(S.playing && !S.explore){ S.t+=dt; const s=scenes[S.i]; let r; try{ r=s.update&&s.update(S.t); }catch(e){ console.error(e); } if(r==='next'||(s.dur&&S.t>=s.dur)||(s.max&&S.t>=s.max)) nextScene(); }
+  const warpNow=S.explore?S.warp:(S.frozen?0:S.warp);
+  if(warpNow>0) stepSim(simTime+dt*warpNow*1000);
+  const now=new Date(simTime), jd=C.JulianDate.fromDate(now); viewer.clock.currentTime=jd; pipV.clock.currentTime=jd;
+  const f=frameAt(now); if(!f) return; lastFrame=f;
+  // target: the farm of this pass, otherwise the nearest one in reach
+  const reach=f.a.st.alt*Math.tan(CAM.max_offnadir*D2R);
+  let site=passSite; if(!site||haversineKm(f.a.st.lat,f.a.st.lon,site.lat,site.lon)>reach*3){ let best=null; for(const s of SITES){ const d=haversineKm(f.a.st.lat,f.a.st.lon,s.lat,s.lon); if(d<reach*1.6&&(!best||d<best.d)) best={s,d}; } site=best?best.s:null; }
+  target=site||target;
+  const dist=site?haversineKm(f.a.st.lat,f.a.st.lon,site.lat,site.lon):1e9;
+  const want=site&&dist<reach*1.6&&sunElevDeg(now,site.lat,site.lon)>10?rollToward(f,site):0;
+  if(gz.connected && gz.roll!=null && performance.now()-gz.t<2000){ rollDeg=gz.roll; if(rollPub&&tick%12===0) rollPub.publish(new ROSLIB.Message({data:want})); }
+  else if(!S.frozen){ const rate=1.5*Math.max(1,warpNow)*dt; rollDeg+=clamp(want-rollDeg,-rate,rate); }
+  const ax=rolled(f,rollDeg); C.Cartesian3.clone(f.a.p,posNow); if(satEnt){ satEnt.position=posNow; satEnt.orientation=quatOf(ax); }
+  camOn=!!(site&&dist<reach*1.25&&sunElevDeg(now,site.lat,site.lon)>10);
+  // footprint and frustum
+  const fov=fovFor(f.a.st.alt*1000), th=Math.tan(fov/2), tv=th*SENSOR_H/SENSOR_W, corners=[];
+  for(const [a,b] of [[1,1],[1,-1],[-1,-1],[-1,1]]){ const d=C.Cartesian3.normalize(C.Cartesian3.add(C.Cartesian3.add(ax.bore,C.Cartesian3.multiplyByScalar(ax.Y,a*th,V()),V()),C.Cartesian3.multiplyByScalar(ax.X,b*tv,V()),V()),V());
+    const hit=C.IntersectionTests.rayEllipsoid(new C.Ray(f.a.p,d),C.Ellipsoid.WGS84); corners.push(hit?C.Ray.getPoint(new C.Ray(f.a.p,d),hit.start):null); }
+  if(camOn&&corners.every(Boolean)){ footH.positions=corners; corners.forEach((c,i)=>rays[i]=[f.a.p,c]); } else { footH.positions=[]; rays.forEach((_,i)=>rays[i]=[]); }
+  const bh=C.IntersectionTests.rayEllipsoid(new C.Ray(f.a.p,ax.bore),C.Ellipsoid.WGS84); centreKm=1e9;
+  if(bh&&site){ const gp=C.Cartographic.fromCartesian(C.Ray.getPoint(new C.Ray(f.a.p,ax.bore),bh.start)); centreKm=haversineKm(gp.latitude*R2D,gp.longitude*R2D,site.lat,site.lon); }
+  // onboard camera pose and optics
+  ps.camera.frustum.fov=fov; ps.camera.setView({destination:f.a.p,orientation:{direction:ax.bore,up:ax.X}});
+  const off=Math.abs(rollDeg), slant=1/Math.pow(Math.cos(off*D2R),1.5), gsd=lens==='flight'?gsd0_m(f.a.st.alt)*slant:+lens*slant;
+  fx.blur=lens==='flight'?.8+off/40:.6; fx.skew=warpNow>0&&warpNow<3?.0015:0;
+  if(S.i!==4){ const w=site?wxAt(site,now):null; fx.haze=w?clamp(.04+(w.dust!=null?w.dust/900:0)+w.cloud/400,0,.4):.06; }
+  $('camOff').hidden=camOn||S.frozen; $('camTag').textContent=`Onboard camera${lens==='flight'?'':', what-if lens'}${S.frozen?', captured frame':camOn?', tracking '+(site?site.short:''):''}`;
+  $('hGsd').textContent=fmt(gsd,gsd<2?2:1)+' m'; $('hTilt').textContent=fmt(off,1)+'°'; $('hSwath').textContent=fmt(gsd*CAM.px/1000,gsd<2?2:1)+' km'; $('hHaze').textContent=fmt(fx.haze*100,0)+'%';
+  // live detector on the camera frames
+  if(det.session && (camOn||S.frozen) && overlayMode==='yolo' && nowPerf-lastDetRun>350){ lastDetRun=nowPerf; runDetector(); }
+  if(overlayMode==='sim'||overlayMode==='yolo') detHud(f,gsd);
+  drawOverlay();
+  // downlink beam
+  let view=null; for(const g of GS){ const la=lookFrom(g,now,f.a.st); if(la.el>10&&(!view||la.el>view.el)) view={...la,g}; }
+  linkPos = view&&(S.i===5||Sim.sat.queue.length)? [f.a.p,C.Cartesian3.fromDegrees(view.g.lon,view.g.lat,100)] : [];
+  if(view&&S.i===5){ const fspl=20*Math.log10(view.range)+20*Math.log10(433)+32.44; $('lRssi').textContent=fmt(20+2+2-2-fspl,0)+' dBm'; S.data.gsName=view.g.name; }
+  // readout
+  if(++tick%6===0){ const camH=viewer.camera.positionCartographic.height/1000, dSat=C.Cartesian3.distance(viewer.camera.positionWC,f.a.p)/1000;
+    if(S.i===0||S.i===7){ $('roBig').textContent=fmt(camH,0)+' km'; $('roSmall').innerHTML=`from the Earth's surface<br><small>Satellite ${fmt(f.a.st.alt,0)} km up, ${fmt(dSat,0)} km from you</small>`; }
+    else { $('roBig').textContent=fmt(f.a.st.alt,0)+' km'; $('roSmall').innerHTML=`above the Earth, ${f.a.st.lat>=0?fmt(f.a.st.lat,1)+'° N':fmt(-f.a.st.lat,1)+'° S'}, ${fmt(f.a.st.lon,1)}° E<br><small>${inEclipse(f.a.st.eci,now)?'In Earth\'s shadow':'In sunlight'}, 7.6 km/s, ${gstDate(now)} ${gst(now)} GST</small>`; } }
+  orbitLines(now);
+}
+function detHud(f,gsd){ const site=target; if(!site) return; const farm=farmOf(site);
+  if(overlayMode==='yolo'&&det.last){ const L=det.last;
+    const mppFrame=(gsd*CAM.px)/L.w; let areaM2=0, confSum=0;
+    if(L.mask){ const {mask,mh,mw,r,S}=L.mask; const pxPerProto=(S/mw)/r; let n=0; for(let i=0;i<mask.length;i++) n+=mask[i]; areaM2=n*Math.pow(pxPerProto*mppFrame,2); }
+    else L.boxes.forEach(b=>areaM2+=(b.x2-b.x1)*(b.y2-b.y1)*mppFrame*mppFrame);
+    L.boxes.forEach(b=>confSum+=b.score);
+    $('dCount').textContent=fmt(L.boxes.length); $('dCountL').textContent=det.seg?'panel regions found':'panel boxes found';
+    $('dMs').innerHTML=fmt(det.ms,0)+'<small>ms</small>'; $('dMsL').textContent='inference time';
+    setDet(areaM2,L.boxes.length?confSum/L.boxes.length:null,site); $('hudDetTitle').textContent=`YOLO, live on this frame`; return; }
+  const built=farm.cells.filter(c=>c.built), shown=Math.round(built.length*reveal), areaM2=shown*farm.cellKm2*farm.gcr*1e6;
+  $('dCount').textContent=fmt(shown); $('dCountL').textContent='farm sections with panels'; $('dMs').textContent='Sim'; $('dMsL').textContent='load the YOLO model for live';
+  setDet(areaM2,0.88,site); $('hudDetTitle').textContent='Simulated detection'; }
+function setDet(areaM2,conf,site){ const real=areaM2/Math.cos(ASSUME.tilt_deg*D2R), cap=real*ASSUME.panel_eff*1000/1e6, ds=Math.floor((simTime+4*36e5)/864e5)*864e5-4*36e5, today=real*ASSUME.panel_eff*dailyInsolation(site,ds)*ASSUME.pr/1e6;
+  $('dArea').innerHTML=fmt(areaM2/1e6,2)+'<small>km²</small>'; $('dCap').innerHTML=fmt(cap,0)+'<small>MW</small>'; $('dToday').innerHTML=fmt(today,1)+'<small>GWh</small>'; $('dConf').textContent=conf==null?'--':fmt(conf*100,0)+'%'; }
+
+/* ======================= controls ======================= */
+function toast(m){ const t=$('toast'); t.textContent=m; t.hidden=false; clearTimeout(toast.h); toast.h=setTimeout(()=>t.hidden=true,3200); }
+$('playBtn').onclick=()=>{ S.playing=!S.playing; $('playBtn').textContent=S.playing?'Pause':'Play'; $('playBtn').setAttribute('aria-pressed',String(S.playing)); };
+$('restartBtn').onclick=()=>{ resetPass(); enterScene(0); S.playing=true; $('playBtn').textContent='Pause'; };
+$('exploreBtn').onclick=()=>{ S.explore=!S.explore; $('exploreBtn').setAttribute('aria-pressed',String(S.explore)); $('caption').hidden=S.explore; if(S.explore){ cinema(); S.frozen=false; S.warp=30; viewer.trackedEntity=undefined; } };
+$('setBtn').onclick=()=>{ const m=$('menu'); m.hidden=!m.hidden; $('setBtn').setAttribute('aria-expanded',String(!m.hidden)); };
+$('lensSel').onchange=e=>{ lens=e.target.value; toast(lens==='flight'?'Flight camera: 75 mm lens on the OV5640':'What-if lens. Our 1U camera cannot reach this resolution from 500 km.'); };
+$('confSel').onchange=e=>det.conf=+e.target.value;
+$('modelBtn').onclick=()=>$('modelFile').click();
+$('modelFile').onchange=async e=>{ const f=e.target.files[0]; if(f) loadModel(new Uint8Array(await f.arrayBuffer()),f.name); };
+addEventListener('dragover',e=>{ e.preventDefault(); $('drop').hidden=false; });
+addEventListener('dragleave',e=>{ if(e.target===$('drop')) $('drop').hidden=true; });
+addEventListener('drop',async e=>{ e.preventDefault(); $('drop').hidden=true; const f=[...e.dataTransfer.files].find(x=>x.name.endsWith('.onnx')); if(f) loadModel(new Uint8Array(await f.arrayBuffer()),f.name); });
+addEventListener('keydown',e=>{ if(e.target.tagName==='SELECT') return;
+  if(e.code==='Space'){ e.preventDefault(); $('playBtn').click(); } if(e.key==='ArrowRight') jumpScene(Math.min(scenes.length-1,S.i+1)); if(e.key==='ArrowLeft') jumpScene(Math.max(0,S.i-1));
+  if(e.key==='h'||e.key==='H') document.body.classList.toggle('filming'); if(e.key==='c'||e.key==='C') $('caption').hidden=!$('caption').hidden; });
+function resetPass(){ simTime=Math.max(simTime,T0.getTime()); prepPass(); }
+
+window.__dbg=()=>`${S.t.toFixed(1)}s scene=${scenes[S.i].key} frozen=${S.frozen} warp=${S.warp} camOn=${camOn} centre=${centreKm.toFixed(1)} target=${target&&target.short} roll=${rollDeg.toFixed(1)} sim=${new Date(simTime).toISOString().slice(5,19)} overlay=${overlayMode}`;
+/* ======================= start ======================= */
+(async()=>{
+  const start=T0.getTime()-20*864e5; simTime=start; stepSim(T0.getTime());   // 20 days of history for the farms
+  loadWeather();
+  try{ const url=await cubesatGlbUrl();
+    satEnt=viewer.entities.add({position:posNow,orientation:C.Quaternion.IDENTITY,model:{uri:url,minimumPixelSize:72,maximumScale:60000},label:{...lbl('Solar Watch','#F2B33D',13),pixelOffset:new C.Cartesian2(0,-56),horizontalOrigin:C.HorizontalOrigin.CENTER,distanceDisplayCondition:undefined}});
+  }catch(e){ console.error(e); satEnt=viewer.entities.add({position:posNow,point:{pixelSize:10,color:C.Color.fromCssColorString('#F2B33D')}}); }
+  prepPass(); lastFrame=frameAt(new Date(simTime));
+  enterScene(0); requestAnimationFrame(loop);
+  setTimeout(()=>{ const l=$('loading'); l.style.opacity=0; setTimeout(()=>l.remove(),900); },2200);
+})();
+</script>
+</body>
+</html>
